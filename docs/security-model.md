@@ -12,6 +12,8 @@ Task relevance and security confidence are separate. The deterministic ranker me
 
 `USE` currently requires all of the following: task relevance above the initial threshold, a complete `SKILL.md` file snapshot, a content hash from the detail response, framework compatibility supported by detected project metadata, no medium/high local findings, and all available external audit findings passing with an exact revision association and timestamps within 90 days. Missing audit results are unknown, not pass. This policy is intentionally strict and may produce many `REVIEW` results.
 
+Blank content hashes or audit revisions are treated as missing. An empty `SKILL.md` is incomplete evidence, and a timezone-naive audit timestamp cannot establish freshness. A listing hash never substitutes for the hash on the detail response that was actually inspected.
+
 ## Local checks
 
 Text heuristics inspect for:

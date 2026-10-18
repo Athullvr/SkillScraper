@@ -1,6 +1,6 @@
 # Limitations
 
-- The relevance weights and `0.34` threshold are initial hypotheses. They have not been evaluated against a labeled task/skill dataset.
+- The relevance weights and `0.34` threshold are initial hypotheses. A 20-task evaluation set is now documented, but live candidate outcomes and baseline comparisons have not been measured because catalog access was unavailable. The set is exploratory and too small to support general claims.
 - Search results come from skills.sh; authentication, rate limits, unavailable results, and catalog changes can affect discovery. SkillScout does not crawl the full catalog.
 - Only up to five candidates can be configured for detail inspection; the default is three. A relevant result outside that inspected set may be missed.
 - Project context reads only direct-root allowlisted metadata. It cannot verify compatibility from source code, scripts, runtime environments, or transitive dependency behavior.

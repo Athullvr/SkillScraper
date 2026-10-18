@@ -92,3 +92,5 @@ Unknown audit status, unbound audit revisions, missing hashes, incomplete detail
 
 See [the security model](docs/security-model.md), [limitations](docs/limitations.md), [JSON schema notes](docs/json-schema.md), [an example report](docs/example-report.md), and [troubleshooting](docs/troubleshooting.md).
 
+See the [exploratory evaluation dataset and measurement protocol](docs/evaluation/README.md). Live task-fit and ordinary catalog-search baseline measurements are pending network access; the dataset is not evidence of recommendation accuracy.
+
