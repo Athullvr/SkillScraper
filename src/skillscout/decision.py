@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+from datetime import datetime, timedelta, timezone
 
 from skillscout.models import (
     AuditFinding,
@@ -20,6 +21,8 @@ from skillscout.models import (
 )
 from skillscout.ranking import relevance_threshold, task_is_routine
 from skillscout.scanner import scan_skill
+
+MAX_AUDIT_AGE = timedelta(days=90)
 
 
 def no_skill_report(
@@ -68,11 +71,17 @@ def make_inspection_evidence(
 
     audit_status = audit_availability
     if audit_availability == "available":
-        if inspection_hash and audits and all(item.revision == inspection_hash for item in audits):
-            audit_status = "current"
-        else:
+        if not inspection_hash or not audits or not all(item.revision == inspection_hash for item in audits):
             audit_status = "unbound"
             notes.append("External audit findings were not associated with the exact inspected content hash.")
+        elif any(item.audited_at is None for item in audits):
+            audit_status = "unbound"
+            notes.append("At least one external audit omitted its timestamp; freshness is unknown.")
+        elif any(_audit_is_stale(item.audited_at) for item in audits if item.audited_at is not None):
+            audit_status = "stale"
+            notes.append("At least one revision-bound external audit is older than the 90-day freshness window.")
+        else:
+            audit_status = "current"
 
     return InspectionEvidence(
         content_hash=inspection_hash,
@@ -152,6 +161,8 @@ def decide_candidate(
         limitations.append("External audit status is unknown because no result was available.")
     elif evidence.external_audit_status == "unbound":
         limitations.append("External audit results are present but their revision association is unknown or stale.")
+    elif evidence.external_audit_status == "stale":
+        limitations.append("External audit results are revision-bound but older than the 90-day freshness window.")
     if compatibility.status in {"unknown", "partial"}:
         limitations.append("Project compatibility remains partly unknown.")
     if compatibility.status == "incompatible":
@@ -291,4 +302,10 @@ def missing_evidence(skill: CatalogSkill, reason: str) -> InspectionEvidence:
 
 def _failed_check_reason(explanation: str) -> str:
     return f"Not established: {explanation[0].lower()}{explanation[1:]}"
+
+
+def _audit_is_stale(audited_at: datetime) -> bool:
+    if audited_at.tzinfo is None:
+        audited_at = audited_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - audited_at > MAX_AUDIT_AGE
 

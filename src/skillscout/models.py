@@ -101,7 +101,7 @@ class InspectionEvidence(BaseModel):
     files_inspected: list[str] = Field(default_factory=list)
     inspection_time: datetime = Field(default_factory=utc_now)
     evidence_status: Literal["complete", "incomplete", "unknown"] = "unknown"
-    external_audit_status: Literal["current", "unbound", "unavailable", "none"] = "none"
+    external_audit_status: Literal["current", "stale", "unbound", "unavailable", "none"] = "none"
     external_audits: list[AuditFinding] = Field(default_factory=list)
     local_findings: list[LocalFinding] = Field(default_factory=list)
     evidence_notes: list[str] = Field(default_factory=list)

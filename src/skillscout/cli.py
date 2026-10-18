@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Literal
@@ -35,7 +36,7 @@ from skillscout.models import (
     DoctorReport,
     ProjectSnapshot,
 )
-from skillscout.llm import LLMAdapter, LLMError
+from skillscout.llm import LLMAdapter, LLMError, redact_secrets
 from skillscout.project_context import ProjectContextError, read_project_context
 from skillscout.ranking import (
     RankedSkill,
@@ -66,6 +67,11 @@ def recommend(
 ) -> None:
     """Assess whether a skill adds value, then inspect a bounded set of candidates."""
     try:
+        task = task.strip()
+        if not task or len(task) > 4_000:
+            raise ValueError("task must contain between 1 and 4000 characters")
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,50}", agent):
+            raise ValueError("agent must be 1–50 letters, digits, dots, underscores, or hyphens")
         config = load_config()
         project_context = read_project_context(project)
         if should_skip_catalog_for_task(task):
@@ -80,7 +86,10 @@ def recommend(
             return
 
         with CatalogClient(config) as catalog, LLMAdapter(config) as llm:
-            search_results = catalog.search(task, limit=min(50, max(10, config.candidate_limit * 6)))
+            search_results = catalog.search(
+                redact_secrets(task),
+                limit=min(50, max(10, config.candidate_limit * 6)),
+            )
             if not search_results:
                 report = no_skill_report(
                     task,
@@ -117,8 +126,8 @@ def recommend(
             raise typer.Exit(code=4)
     except typer.Exit:
         raise
-    except (ConfigurationError, ProjectContextError) as exc:
-        _emit_error(str(exc), output_format, code="configuration_error", exit_code=2)
+    except (ConfigurationError, ProjectContextError, ValueError) as exc:
+        _emit_error(str(exc), output_format, code="input_error", exit_code=2)
     except CatalogAuthenticationError as exc:
         _emit_error(str(exc), output_format, code="catalog_authentication_error", exit_code=3)
     except (CatalogUnavailableError, CatalogDataError, CatalogError) as exc:

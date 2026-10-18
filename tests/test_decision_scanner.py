@@ -67,6 +67,25 @@ def test_revision_change_unbinds_audit_and_requires_review():
     assert any("stale" in item for item in limitations)
 
 
+def test_old_revision_bound_audit_is_stale_and_requires_review():
+    old_audit = AuditFinding(
+        provider="Socket",
+        status="pass",
+        summary="Old result",
+        auditedAt="2026-01-01T00:00:00Z",
+        revision="hash-1",
+    )
+    evidence = make_inspection_evidence(
+        detail("# FastAPI authentication skill"), [old_audit], "available", []
+    )
+
+    decision, _, limitations = decide_candidate(evidence, compatible(), 0.9)
+
+    assert evidence.external_audit_status == "stale"
+    assert decision == Decision.REVIEW
+    assert any("90-day" in item for item in limitations)
+
+
 def test_missing_external_audit_remains_unknown_and_cannot_receive_use():
     evidence = make_inspection_evidence(
         detail("# FastAPI authentication skill"), [], "none", ["No audit was returned"]
@@ -94,6 +113,18 @@ def test_critical_credential_exfiltration_cannot_receive_use():
 def test_current_failing_audit_is_a_hard_block_even_when_relevant():
     finding = passing_audit()
     finding.status = "fail"
+    evidence = make_inspection_evidence(
+        detail("# FastAPI authentication skill"), [finding], "available", []
+    )
+
+    decision, _, _ = decide_candidate(evidence, compatible(), 1.0)
+
+    assert decision == Decision.AVOID
+
+
+def test_current_critical_risk_audit_is_a_hard_block():
+    finding = passing_audit()
+    finding.risk_level = "CRITICAL"
     evidence = make_inspection_evidence(
         detail("# FastAPI authentication skill"), [finding], "available", []
     )
