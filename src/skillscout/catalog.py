@@ -83,6 +83,8 @@ class CatalogClient:
         payload = self._get_json("/api/v1/skills/search", params={"q": query, "limit": limit})
         if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
             raise CatalogDataError("catalog search response is missing its data array")
+        if len(payload["data"]) > limit:
+            raise CatalogDataError("catalog search returned more results than the requested limit")
         results: list[CatalogSkill] = []
         try:
             for raw in payload["data"]:
@@ -177,6 +179,8 @@ class CatalogClient:
                         )
                     if response.status_code >= 400:
                         raise _ResponseStatusError(response.status_code)
+                    if 300 <= response.status_code < 400:
+                        raise CatalogUnavailableError("catalog redirected the request; redirects are disabled")
                     body = self._read_bounded(response)
                 try:
                     return json.loads(body)

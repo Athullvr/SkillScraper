@@ -38,7 +38,7 @@ Options:
 - `--agent codex`: target agent used in the proposed install command. Defaults to `codex`.
 - `--format text|json`: terminal report or versioned JSON. Defaults to `text`.
 
-The candidate limit is configurable with `SKILLSCOUT_CANDIDATE_LIMIT` (1–5, default 3). Ranking weights are initial hypotheses, not validated truth.
+The candidate limit is configurable with `SKILLSCOUT_CANDIDATE_LIMIT` (1–5, default 3). Ranking weights and the relevance threshold are initial hypotheses, not validated truth. Task text is limited to 4000 characters.
 
 ### `skillscout inspect <skill-id>`
 
@@ -80,9 +80,9 @@ Catalog requests use explicit connect/read timeouts, response size caps, and bou
 
 ## Privacy
 
-Project awareness reads only selected metadata files directly in the project root (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`), checks a short allowlist of lockfiles/config markers, and caps metadata reads at 64 KiB per file. It does not traverse source trees, execute scripts, install dependencies, or upload project source.
+Project awareness reads only selected metadata files directly in the project root (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `requirements.txt`), checks a short allowlist of lockfiles/config markers, and caps metadata reads at 64 KiB per file. It does not traverse source trees, execute scripts, install dependencies, or upload project source.
 
-The deterministic path sends the redacted task query to skills.sh for search. The optional LLM adapter is disabled unless an API key is configured and `SKILLSCOUT_LLM_SEND_TASK=1` explicitly opts into sending task text. Only the redacted task and bounded candidate description are eligible for transmission. Project metadata and source files are not sent. Secret redaction is heuristic; review task text before using remote services.
+The deterministic path sends the redacted task query to skills.sh for search. The optional LLM adapter is disabled unless an API key is configured and `SKILLSCOUT_LLM_SEND_TASK=1` explicitly opts into sending task text. Only the redacted task and bounded candidate description are eligible for transmission. Project metadata and source files are not sent. The LLM score contributes 25% to task-fit ranking when enabled; it never contributes security evidence. Secret redaction is heuristic; review task text before using remote services.
 
 ## Security model and limitations
 
@@ -90,5 +90,5 @@ The scanner checks retrieved text for suspicious instruction overrides, credenti
 
 Unknown audit status, unbound audit revisions, missing hashes, incomplete details, and uncertain compatibility remain unknown and lead to `REVIEW`. A hash change prevents old audit evidence from satisfying the current revision gate. External audit providers may have their own gaps. Review the source and audit details before manually installing a skill.
 
-See [the security model](docs/security-model.md), [JSON schema notes](docs/json-schema.md), [an example report](docs/example-report.md), and [troubleshooting](docs/troubleshooting.md).
+See [the security model](docs/security-model.md), [limitations](docs/limitations.md), [JSON schema notes](docs/json-schema.md), [an example report](docs/example-report.md), and [troubleshooting](docs/troubleshooting.md).
 

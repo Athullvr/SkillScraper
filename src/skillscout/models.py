@@ -47,6 +47,13 @@ class CatalogSkill(BaseModel):
     description: str | None = Field(default=None, max_length=10_000)
     retrieved_at: datetime = Field(default_factory=utc_now)
 
+    @field_validator("source_url", "install_url")
+    @classmethod
+    def require_credential_free_https_url(cls, value: HttpUrl | None) -> HttpUrl | None:
+        if value is not None and (value.scheme != "https" or value.username or value.password):
+            raise ValueError("catalog URLs must use HTTPS and cannot embed credentials")
+        return value
+
 
 class SkillFile(BaseModel):
     model_config = ConfigDict(extra="forbid")

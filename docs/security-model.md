@@ -26,5 +26,5 @@ These checks are not a comprehensive security scanner. They can miss novel or in
 
 ## Network and privacy
 
-Catalog calls use HTTPS, explicit timeouts, bounded retries, `Retry-After`, a 2 MB response limit, and optional bearer authentication. Audit lookup is best-effort and unavailable audit data does not interrupt search. Project metadata is local and bounded; source files are never read. Search and optional LLM requests receive task text after heuristic redaction. The optional LLM is disabled without configuration and requires a separate opt-in before task text is sent. Redaction can miss secrets, so inspect task text before using remote services.
+Catalog calls use HTTPS, explicit timeouts, bounded retries, `Retry-After`, a 2 MB response limit, and optional bearer authentication. Audit lookup is best-effort and unavailable audit data does not interrupt search. Project metadata is local and bounded; source files are never read. Search and optional LLM requests receive task text after heuristic redaction. The optional LLM is disabled without configuration and requires a separate opt-in before task text is sent. Redaction can miss secrets, so inspect task text before using remote services. When enabled, the LLM contributes 25% of task-fit ranking and cannot provide scanner results, compatibility facts, provenance, or security decisions.
 

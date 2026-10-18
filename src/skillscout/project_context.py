@@ -13,6 +13,7 @@ METADATA_FILES = (
     "package.json",
     "Cargo.toml",
     "go.mod",
+    "requirements.txt",
 )
 LOCKFILES = (
     "uv.lock",
@@ -80,7 +81,7 @@ def read_project_context(project_path: str | Path) -> ProjectSnapshot:
     unknowns = ["Source files and project scripts were not read or executed."]
     metadata: dict[str, bytes] = {}
 
-    for filename in (*METADATA_FILES, *LOCKFILES, *FRAMEWORK_CONFIGS):
+    for filename in dict.fromkeys((*METADATA_FILES, *LOCKFILES, *FRAMEWORK_CONFIGS)):
         candidate = root / filename
         try:
             if candidate.is_symlink() or not candidate.is_file():
@@ -111,19 +112,72 @@ def read_project_context(project_path: str | Path) -> ProjectSnapshot:
                 requires_python = project.get("requires-python")
                 if isinstance(requires_python, str):
                     facts.add(f"Python requirement: {requires_python}")
-                dependencies = list(project.get("dependencies", []))
+                raw_dependencies = project.get("dependencies", [])
+                dependencies = raw_dependencies if isinstance(raw_dependencies, list) else []
                 optional = project.get("optional-dependencies", {})
                 if isinstance(optional, dict):
                     dependencies.extend(
                         dep for group in optional.values() if isinstance(group, list) for dep in group
                     )
                 _add_dependency_facts(dependencies, PYTHON_FRAMEWORKS, facts)
+            poetry = parsed.get("tool", {}).get("poetry", {}) if isinstance(parsed.get("tool", {}), dict) else {}
+            if isinstance(poetry, dict):
+                poetry_dependencies = poetry.get("dependencies", {})
+                if isinstance(poetry_dependencies, dict):
+                    _add_dependency_facts(list(poetry_dependencies), PYTHON_FRAMEWORKS, facts)
             tool = parsed.get("tool", {})
             if isinstance(tool, dict):
                 if "poetry" in tool:
                     facts.add("Poetry project configuration detected")
                 if "uv" in tool:
                     facts.add("uv project configuration detected")
+
+    if "Cargo.toml" in metadata:
+        try:
+            parsed_cargo = tomllib.loads(metadata["Cargo.toml"].decode("utf-8"))
+        except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+            unknowns.append("Cargo.toml was present but could not be parsed.")
+        else:
+            facts.add("Rust project metadata present")
+            cargo_dependencies: set[str] = set()
+            for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+                values = parsed_cargo.get(section, {})
+                if isinstance(values, dict):
+                    cargo_dependencies.update(values)
+            for crate in sorted(cargo_dependencies & {"axum", "actix-web", "rocket", "tokio", "serde"}):
+                facts.add(f"Rust dependency detected: {crate}")
+
+    if "go.mod" in metadata:
+        try:
+            go_mod_text = metadata["go.mod"].decode("utf-8")
+        except UnicodeDecodeError:
+            unknowns.append("go.mod was present but was not valid UTF-8.")
+        else:
+            facts.add("Go project metadata present")
+            for module, display in (
+                ("github.com/gin-gonic/gin", "Gin"),
+                ("github.com/gofiber/fiber", "Fiber"),
+                ("github.com/labstack/echo", "Echo"),
+                ("github.com/go-chi/chi", "Chi"),
+            ):
+                if module in go_mod_text:
+                    facts.add(f"Go dependency detected: {display}")
+
+    requirements = metadata.get("requirements.txt")
+    if requirements:
+        try:
+            requirement_lines = requirements.decode("utf-8").splitlines()
+        except UnicodeDecodeError:
+            unknowns.append("requirements.txt was present but was not valid UTF-8.")
+        else:
+            dependencies = [
+                line.strip()
+                for line in requirement_lines
+                if line.strip() and not line.lstrip().startswith(("#", "-"))
+            ]
+            _add_dependency_facts(dependencies, PYTHON_FRAMEWORKS, facts)
+            if dependencies:
+                inferred.add("Python runtime inferred from requirements.txt")
 
     package_json = metadata.get("package.json")
     if package_json:

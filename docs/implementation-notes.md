@@ -4,3 +4,5 @@ Before implementation, the repository contained no application source, package m
 
 The project is being established as a `src/`-layout Python package. Network behavior in tests is fixture-backed; a live catalog smoke test is a separate manual action documented in `manual-catalog-demo.md`.
 
+During this implementation, uv could not resolve or download PyPI packages because DNS/network access was unavailable and its cache had no project dependencies. As a result, a valid `uv.lock` could not be generated and `uv build --offline` could not fetch the Hatchling build backend. The direct live catalog smoke attempt also failed on network access after bounded retries. These are environment limitations, not skipped success checks; rerun `uv lock`, `uv sync --all-extras`, packaging checks, and the manual demo in a network-enabled environment.
+
