@@ -13,7 +13,7 @@ uv tool install .
 skillscout doctor
 skillscout recommend "Add Supabase OAuth login to the FastAPI service" --project . --agent codex
 skillscout recommend "Migrate this app from Django to FastAPI" --format json
-skillscout inspect vercel-labs/agent-skills/find-skills
+skillscout inspect vercel-labs/skills/find-skills
 ```
 
 For development:

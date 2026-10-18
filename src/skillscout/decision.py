@@ -77,7 +77,10 @@ def make_inspection_evidence(
         elif any(item.audited_at is None for item in audits):
             audit_status = "unbound"
             notes.append("At least one external audit omitted its timestamp; freshness is unknown.")
-        elif any(_audit_is_stale(item.audited_at) for item in audits if item.audited_at is not None):
+        elif any(_audit_freshness(item.audited_at) == "unbound" for item in audits if item.audited_at is not None):
+            audit_status = "unbound"
+            notes.append("At least one external audit timestamp is implausibly far in the future.")
+        elif any(_audit_freshness(item.audited_at) == "stale" for item in audits if item.audited_at is not None):
             audit_status = "stale"
             notes.append("At least one revision-bound external audit is older than the 90-day freshness window.")
         else:
@@ -304,8 +307,13 @@ def _failed_check_reason(explanation: str) -> str:
     return f"Not established: {explanation[0].lower()}{explanation[1:]}"
 
 
-def _audit_is_stale(audited_at: datetime) -> bool:
+def _audit_freshness(audited_at: datetime) -> str:
     if audited_at.tzinfo is None:
         audited_at = audited_at.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - audited_at > MAX_AUDIT_AGE
+    age = datetime.now(timezone.utc) - audited_at
+    if age < -timedelta(days=1):
+        return "unbound"
+    if age > MAX_AUDIT_AGE:
+        return "stale"
+    return "current"
 

@@ -347,6 +347,7 @@
           "default": "none",
           "enum": [
             "current",
+            "stale",
             "unbound",
             "unavailable",
             "none"

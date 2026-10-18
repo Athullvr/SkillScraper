@@ -102,6 +102,23 @@ def test_audit_authentication_failure_is_unknown_not_a_search_failure(config):
     assert "requires credentials" in notes[0]
 
 
+def test_missing_audit_404_is_recorded_as_no_result(config):
+    with respx.mock(base_url=BASE) as router:
+        router.get("/api/v1/skills/search").mock(
+            return_value=httpx.Response(200, json={"data": [listing()]})
+        )
+        router.get("/api/v1/skills/audit/acme/skills/fastapi-auth").mock(
+            return_value=httpx.Response(404, json={"error": "not_found"})
+        )
+        with CatalogClient(config) as catalog:
+            skill = catalog.search("FastAPI auth")[0]
+            audits, state, notes = catalog.get_audits(skill)
+
+    assert audits == []
+    assert state == "none"
+    assert "No external audit" in notes[0]
+
+
 def test_transient_failure_retries_and_respects_retry_after(config):
     delays: list[float] = []
     with respx.mock(base_url=BASE) as router:
