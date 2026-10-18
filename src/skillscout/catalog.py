@@ -196,7 +196,9 @@ class CatalogClient:
                         f"catalog request failed with HTTP {exc.status_code} after bounded retries"
                     ) from exc
                 self._wait_before_retry(attempt, exc.retry_after)
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            except httpx.DecodingError as exc:
+                raise CatalogDataError("catalog response encoding could not be decoded") from exc
+            except httpx.TransportError as exc:
                 if attempt >= self.config.retry_count:
                     raise CatalogUnavailableError("catalog request failed after bounded retries") from exc
                 self._wait_before_retry(attempt, None)

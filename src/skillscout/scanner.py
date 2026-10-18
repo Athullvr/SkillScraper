@@ -115,5 +115,10 @@ def scan_skill(detail: SkillDetail) -> tuple[list[LocalFinding], list[str], bool
 
     if not any(file.path.lower() == "skill.md" for file in files):
         complete = False
+    elif not any(
+        file.path.lower() == "skill.md" and file.contents.strip()
+        for file in files
+    ):
+        complete = False
     return findings, inspected, complete
 

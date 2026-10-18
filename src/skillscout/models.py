@@ -15,6 +15,14 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _normalize_optional_revision(value: object) -> object:
+    """Treat blank revision identifiers as missing evidence."""
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return value
+
+
 class Decision(StrEnum):
     NO_SKILL_NEEDED = "NO_SKILL_NEEDED"
     USE = "USE"
@@ -46,6 +54,11 @@ class CatalogSkill(BaseModel):
     content_hash: str | None = Field(default=None, alias="hash", max_length=256)
     description: str | None = Field(default=None, max_length=10_000)
     retrieved_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("content_hash", mode="before")
+    @classmethod
+    def normalize_content_hash(cls, value: object) -> object:
+        return _normalize_optional_revision(value)
 
     @field_validator("source_url", "install_url")
     @classmethod
@@ -85,6 +98,11 @@ class SkillDetail(BaseModel):
     content_hash: str | None = Field(default=None, alias="hash", max_length=256)
     files: list[SkillFile] | None = Field(default=None, max_length=100)
 
+    @field_validator("content_hash", mode="before")
+    @classmethod
+    def normalize_content_hash(cls, value: object) -> object:
+        return _normalize_optional_revision(value)
+
 
 class AuditFinding(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -100,6 +118,21 @@ class AuditFinding(BaseModel):
         validation_alias=AliasChoices("revision", "hash", "contentHash"),
         max_length=256,
     )
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("risk_level", mode="before")
+    @classmethod
+    def normalize_risk_level(cls, value: object) -> object:
+        return _normalize_optional_revision(value)
+
+    @field_validator("revision", mode="before")
+    @classmethod
+    def normalize_revision(cls, value: object) -> object:
+        return _normalize_optional_revision(value)
 
 
 class LocalFinding(BaseModel):

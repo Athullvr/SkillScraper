@@ -77,9 +77,15 @@ def make_inspection_evidence(
         elif any(item.audited_at is None for item in audits):
             audit_status = "unbound"
             notes.append("At least one external audit omitted its timestamp; freshness is unknown.")
-        elif any(_audit_freshness(item.audited_at) == "unbound" for item in audits if item.audited_at is not None):
+        elif any(
+            _audit_freshness(item.audited_at) == "unbound"
+            for item in audits
+            if item.audited_at is not None
+        ):
             audit_status = "unbound"
-            notes.append("At least one external audit timestamp is implausibly far in the future.")
+            notes.append(
+                "At least one external audit timestamp lacks a timezone or is implausibly far in the future."
+            )
         elif any(_audit_freshness(item.audited_at) == "stale" for item in audits if item.audited_at is not None):
             audit_status = "stale"
             notes.append("At least one revision-bound external audit is older than the 90-day freshness window.")
@@ -117,8 +123,8 @@ def decide_candidate(
     critical_audit = [
         item
         for item in current_audits
-        if item.status.lower() == "fail"
-        or (item.risk_level or "").upper() in {"HIGH", "CRITICAL"}
+        if item.status.strip().lower() == "fail"
+        or (item.risk_level or "").strip().upper() in {"HIGH", "CRITICAL"}
     ]
     if critical_local:
         return (
@@ -138,12 +144,14 @@ def decide_candidate(
         (evidence.content_hash is not None, "The inspection is bound to a catalog content hash."),
         (evidence.external_audit_status == "current", "External audit results are associated with this exact revision."),
         (
-            bool(current_audits) and all(item.status.lower() == "pass" for item in current_audits),
+            bool(current_audits)
+            and all(item.status.strip().lower() == "pass" for item in current_audits),
             "All available revision-bound external audits report pass.",
         ),
         (
             not any(
-                item.status.lower() == "warn" or (item.risk_level or "").upper() == "MEDIUM"
+                item.status.strip().lower() == "warn"
+                or (item.risk_level or "").strip().upper() == "MEDIUM"
                 for item in current_audits
             ),
             "No current external audit reports a warning or medium risk level.",
@@ -229,7 +237,8 @@ def make_inspection_report(
 ) -> SkillInspectionReport:
     current_audits = evidence.external_audits if evidence.external_audit_status == "current" else []
     hard_block = any(item.severity == Severity.CRITICAL for item in evidence.local_findings) or any(
-        item.status.lower() == "fail" or (item.risk_level or "").upper() in {"HIGH", "CRITICAL"}
+        item.status.strip().lower() == "fail"
+        or (item.risk_level or "").strip().upper() in {"HIGH", "CRITICAL"}
         for item in current_audits
     )
     decision = Decision.AVOID if hard_block else Decision.REVIEW
@@ -315,8 +324,8 @@ def _failed_check_reason(explanation: str) -> str:
 
 
 def _audit_freshness(audited_at: datetime) -> str:
-    if audited_at.tzinfo is None:
-        audited_at = audited_at.replace(tzinfo=timezone.utc)
+    if audited_at.tzinfo is None or audited_at.utcoffset() is None:
+        return "unbound"
     age = datetime.now(timezone.utc) - audited_at
     if age < -timedelta(days=1):
         return "unbound"
