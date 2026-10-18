@@ -204,7 +204,7 @@ def doctor() -> None:
         raise typer.Exit(code=2)
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     version: bool = typer.Option(False, "--version", help="Show the SkillScout version and exit."),
 ) -> None:

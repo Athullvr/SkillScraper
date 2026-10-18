@@ -50,8 +50,14 @@ class CatalogSkill(BaseModel):
     @field_validator("source_url", "install_url")
     @classmethod
     def require_credential_free_https_url(cls, value: HttpUrl | None) -> HttpUrl | None:
-        if value is not None and (value.scheme != "https" or value.username or value.password):
-            raise ValueError("catalog URLs must use HTTPS and cannot embed credentials")
+        if value is not None and (
+            value.scheme != "https"
+            or value.username
+            or value.password
+            or value.query
+            or value.fragment
+        ):
+            raise ValueError("catalog URLs must use HTTPS without credentials, query, or fragment")
         return value
 
 

@@ -105,7 +105,15 @@ class LLMAdapter:
             assessment = LLMFitAssessment.model_validate_json(content)
         except LLMError:
             raise
-        except (httpx.HTTPError, json.JSONDecodeError, KeyError, IndexError, TypeError, ValidationError) as exc:
+        except (
+            httpx.HTTPError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            KeyError,
+            IndexError,
+            TypeError,
+            ValidationError,
+        ) as exc:
             raise LLMError("optional provider request or output validation failed") from exc
         if assessment.skill_id != skill_id:
             raise LLMError("optional provider returned an assessment for a different skill ID")

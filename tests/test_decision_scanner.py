@@ -152,6 +152,19 @@ def test_current_critical_risk_audit_is_a_hard_block(monkeypatch):
     assert decision == Decision.AVOID
 
 
+def test_current_medium_audit_risk_requires_review(monkeypatch):
+    freeze_decision_clock(monkeypatch)
+    finding = passing_audit()
+    finding.risk_level = "MEDIUM"
+    evidence = make_inspection_evidence(
+        detail("# FastAPI authentication skill"), [finding], "available", []
+    )
+
+    decision, _, _ = decide_candidate(evidence, compatible(), 1.0)
+
+    assert decision == Decision.REVIEW
+
+
 def test_no_skill_report_is_distinct_from_candidate_security_decision():
     project = ProjectSnapshot(path="/tmp/project")
     report = report_for_candidates("simple task", "codex", project, [])

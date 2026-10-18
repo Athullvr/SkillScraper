@@ -87,6 +87,7 @@ def _render_project(report: Report, console: Console) -> None:
     project = report.project
     facts = project.facts or ["No supported project metadata detected."]
     console.print("\n[bold]Project context[/bold]")
+    console.print(f"  • Metadata files: {escape(', '.join(project.detected_files) or 'none')}")
     for fact in facts:
         console.print(f"  • Detected: {escape(fact)}")
     for inferred in project.inferred:

@@ -141,6 +141,13 @@ def decide_candidate(
             bool(current_audits) and all(item.status.lower() == "pass" for item in current_audits),
             "All available revision-bound external audits report pass.",
         ),
+        (
+            not any(
+                item.status.lower() == "warn" or (item.risk_level or "").upper() == "MEDIUM"
+                for item in current_audits
+            ),
+            "No current external audit reports a warning or medium risk level.",
+        ),
         (compatibility.status == "compatible", "Project compatibility is supported by detected metadata."),
         (
             not any(item.severity in {Severity.MEDIUM, Severity.HIGH} for item in evidence.local_findings),

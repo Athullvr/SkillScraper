@@ -76,7 +76,7 @@ Typer uses exit code `2` for invalid command syntax. JSON-mode errors use `{"sch
 | `SKILLSCOUT_LLM_MODEL` | `gpt-4o-mini` | Optional provider model identifier |
 | `SKILLSCOUT_LLM_SEND_TASK` | `false` | Explicitly allow sending task text for LLM task-fit help |
 
-Catalog requests use explicit connect/read timeouts, response size caps, and bounded retries. Audit lookup failures are recorded as unknown evidence and do not stop search. The API may require credentials; configure a token if search or detail requests return 401/403.
+Catalog requests use explicit connect/read timeouts, response size caps, and bounded retries. Audit lookup failures are recorded as unknown evidence and do not stop search. The API may require credentials; configure a token if search or detail requests return 401/403. SkillScout uses the documented [skills.sh API](https://www.skills.sh/docs/api) and emits inert commands following the [skills CLI reference](https://www.skills.sh/docs/cli).
 
 ## Privacy
 
