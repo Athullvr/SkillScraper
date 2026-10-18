@@ -26,17 +26,14 @@ from skillscout.decision import (
     make_inspection_report,
     missing_evidence,
     no_skill_report,
-    proposed_install_command,
     report_for_candidates,
     should_skip_catalog_for_task,
 )
 from skillscout.models import (
     CatalogSkill,
-    Compatibility,
     Decision,
     DoctorReport,
     ProjectSnapshot,
-    SkillDetail,
 )
 from skillscout.llm import LLMAdapter, LLMError
 from skillscout.project_context import ProjectContextError, read_project_context
@@ -45,7 +42,6 @@ from skillscout.ranking import (
     evaluate_compatibility,
     rank_catalog_results,
     refine_rank,
-    relevance_threshold,
 )
 from skillscout.report import json_report, render_doctor, render_inspection, render_recommendation
 

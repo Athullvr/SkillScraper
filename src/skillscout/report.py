@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import TypeVar
 
 from rich import box
 from rich.console import Console
-from rich.markup import escape
+from rich.markup import escape as rich_escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -20,6 +21,13 @@ from skillscout.models import (
 )
 
 ModelT = TypeVar("ModelT", Report, SkillInspectionReport, DoctorReport)
+CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def escape(value: object) -> str:
+    """Escape markup and strip terminal control characters from untrusted strings."""
+    cleaned = CONTROL_CHARS.sub(" ", str(value))
+    return rich_escape(cleaned)
 
 
 def json_report(model: ModelT) -> str:

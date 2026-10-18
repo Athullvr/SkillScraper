@@ -43,13 +43,34 @@ def load_config() -> Config:
     """Load and validate configuration from environment variables."""
     base_url = os.getenv("SKILLSCOUT_CATALOG_URL", "https://skills.sh").rstrip("/")
     parsed_url = urlparse(base_url)
-    if parsed_url.scheme != "https" or not parsed_url.netloc:
-        raise ConfigurationError("SKILLSCOUT_CATALOG_URL must be an HTTPS URL")
+    if (
+        parsed_url.scheme != "https"
+        or not parsed_url.hostname
+        or parsed_url.username
+        or parsed_url.password
+        or parsed_url.query
+        or parsed_url.fragment
+    ):
+        raise ConfigurationError(
+            "SKILLSCOUT_CATALOG_URL must be an HTTPS URL without user info, query, or fragment"
+        )
 
     llm_base_url = os.getenv("SKILLSCOUT_LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     llm_parsed = urlparse(llm_base_url)
-    if llm_parsed.scheme != "https" or not llm_parsed.netloc:
-        raise ConfigurationError("SKILLSCOUT_LLM_BASE_URL must be an HTTPS URL")
+    if (
+        llm_parsed.scheme != "https"
+        or not llm_parsed.hostname
+        or llm_parsed.username
+        or llm_parsed.password
+        or llm_parsed.query
+        or llm_parsed.fragment
+    ):
+        raise ConfigurationError(
+            "SKILLSCOUT_LLM_BASE_URL must be an HTTPS URL without user info, query, or fragment"
+        )
+    model = os.getenv("SKILLSCOUT_LLM_MODEL", "gpt-4o-mini")
+    if not model or len(model) > 200:
+        raise ConfigurationError("SKILLSCOUT_LLM_MODEL must contain between 1 and 200 characters")
 
     return Config(
         catalog_base_url=base_url,
@@ -61,7 +82,7 @@ def load_config() -> Config:
         retry_count=2,
         llm_api_key=os.getenv("SKILLSCOUT_LLM_API_KEY"),
         llm_base_url=llm_base_url,
-        llm_model=os.getenv("SKILLSCOUT_LLM_MODEL", "gpt-4o-mini"),
+        llm_model=model,
         llm_send_task=os.getenv("SKILLSCOUT_LLM_SEND_TASK", "").lower() in {"1", "true", "yes"},
     )
 

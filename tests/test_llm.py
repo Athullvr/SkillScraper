@@ -79,10 +79,14 @@ def test_llm_rejects_malformed_structured_output(config):
 
 
 def test_secret_redaction_masks_tokens_and_assigned_values():
-    value = "Set API_KEY=super-secret and use token sk-1234567890abcdef1234567890"
+    value = (
+        'Set AWS_SECRET_ACCESS_KEY="super-secret value" and use token '
+        "sk-1234567890abcdef1234567890"
+    )
 
     redacted = redact_secrets(value)
 
     assert "super-secret" not in redacted
+    assert "value" not in redacted
     assert "sk-1234567890abcdef1234567890" not in redacted
 

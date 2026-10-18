@@ -119,10 +119,13 @@ def redact_secrets(text: str) -> str:
         (r"\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b", "[REDACTED_TOKEN]"),
         (r"\bAKIA[0-9A-Z]{16}\b", "[REDACTED_AWS_KEY]"),
         (
-            r"(?i)\b(api[_ -]?key|access[_ -]?token|secret[_ -]?key|password|credential)"
-            r"\s*[:=]\s*(['\"]?)[^\s,;\"']+",
-            r"\1=\2[REDACTED]",
+            r"(?i)\b([a-z0-9_-]*(?:api[_ -]?key|access[_ -]?token|secret(?:[_ -]?key)?|password|credential)[a-z0-9_-]*)"
+            r"\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)",
+            r"\1=[REDACTED]",
         ),
+        (r"(?i)\b(?:bearer|authorization)\s+[A-Za-z0-9._~+/=-]{16,}", "[REDACTED_AUTHORIZATION]"),
+        (r"\b[A-Za-z0-9_-]{32,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b", "[REDACTED_JWT]"),
+        (r"\b[A-Za-z0-9_+/=-]{32,}\b", "[REDACTED_LONG_TOKEN]"),
         (r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED_PRIVATE_KEY]"),
     )
     for pattern, replacement in patterns:

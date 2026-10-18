@@ -42,7 +42,7 @@ class _ResponseStatusError(CatalogError):
 class CatalogClient:
     """Skills.sh client with explicit timeouts, size caps, and bounded retries."""
 
-    TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
+    TRANSIENT_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 
     def __init__(
         self,
@@ -184,6 +184,8 @@ class CatalogClient:
                     raise CatalogDataError("catalog returned invalid JSON") from exc
             except _ResponseStatusError as exc:
                 if exc.status_code not in self.TRANSIENT_STATUS_CODES or attempt >= self.config.retry_count:
+                    if exc.status_code == 404:
+                        raise exc
                     if exc.status_code == 429:
                         raise CatalogUnavailableError("catalog rate limit remained after retries") from exc
                     raise CatalogUnavailableError(
