@@ -43,6 +43,10 @@ def load_config() -> Config:
     """Load and validate configuration from environment variables."""
     base_url = os.getenv("SKILLSCOUT_CATALOG_URL", "https://skills.sh").rstrip("/")
     parsed_url = urlparse(base_url)
+    try:
+        parsed_url.port
+    except ValueError as exc:
+        raise ConfigurationError("SKILLSCOUT_CATALOG_URL contains an invalid port") from exc
     if (
         parsed_url.scheme != "https"
         or not parsed_url.hostname
@@ -57,6 +61,10 @@ def load_config() -> Config:
 
     llm_base_url = os.getenv("SKILLSCOUT_LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     llm_parsed = urlparse(llm_base_url)
+    try:
+        llm_parsed.port
+    except ValueError as exc:
+        raise ConfigurationError("SKILLSCOUT_LLM_BASE_URL contains an invalid port") from exc
     if (
         llm_parsed.scheme != "https"
         or not llm_parsed.hostname

@@ -44,7 +44,7 @@ from skillscout.ranking import (
     rank_catalog_results,
     refine_rank,
 )
-from skillscout.report import json_report, render_doctor, render_inspection, render_recommendation
+from skillscout.report import escape, json_report, render_doctor, render_inspection, render_recommendation
 
 app = typer.Typer(
     name="skillscout",
@@ -257,6 +257,7 @@ def _inspect_candidate(
                 score=round(refined.score * 0.75 + assessment.score * 0.25, 3),
                 rationale=[
                     *refined.rationale,
+                    "Optional LLM contributed 25% to the displayed relevance score.",
                     *[f"Optional LLM task-fit suggestion: {reason}" for reason in assessment.rationale],
                 ],
             )
@@ -326,7 +327,7 @@ def _emit_error(message: str, output_format: str, *, code: str, exit_code: int) 
             )
         )
     else:
-        ERROR_CONSOLE.print(f"[bold red]Error:[/bold red] {message}")
+        ERROR_CONSOLE.print(f"[bold red]Error:[/bold red] {escape(message)}")
     raise typer.Exit(code=exit_code)
 
 

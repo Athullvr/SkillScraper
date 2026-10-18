@@ -65,7 +65,7 @@ class SkillFile(BaseModel):
     @classmethod
     def require_relative_path(cls, value: str) -> str:
         path = PurePosixPath(value)
-        if path.is_absolute() or ".." in path.parts or "\\" in value:
+        if value == "." or path.is_absolute() or ".." in path.parts or "\\" in value:
             raise ValueError("file path must stay within the skill directory")
         return value
 

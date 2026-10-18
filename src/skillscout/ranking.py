@@ -58,7 +58,10 @@ def rank_catalog_results(task: str, skills: list[CatalogSkill]) -> list[RankedSk
             rationale.append("Generic skill wording adds little beyond an agent's ordinary coding capability.")
         # Catalog order is a weak tie-break signal and never creates task relevance by itself.
         if score > 0:
-            score = min(1.0, score + max(0.0, 0.03 - index * 0.003))
+            order_bonus = max(0.0, 0.03 - index * 0.003)
+            score = min(1.0, score + order_bonus)
+            if order_bonus:
+                rationale.append("Catalog search order added a small tie-break signal.")
         if not rationale:
             rationale.append("No meaningful task terms were found in the skill listing metadata.")
         ranked.append(RankedSkill(skill=skill, score=round(score, 3), rationale=rationale))
@@ -74,7 +77,10 @@ def refine_rank(task: str, ranked: RankedSkill, detail: SkillDetail) -> RankedSk
     )
     if not document:
         return ranked
-    score, rationale = _score(_terms(task), f"{ranked.skill.name} {ranked.skill.slug} {document}")
+    skill_metadata = f"{ranked.skill.name} {ranked.skill.slug} {document}"
+    score, rationale = _score(_terms(task), skill_metadata)
+    if _terms(f"{ranked.skill.name} {ranked.skill.slug}") & GENERIC_SKILL_TERMS:
+        score = max(0.0, score - 0.12)
     score = max(ranked.score, score)
     rationale = [*ranked.rationale]
     additional = [item for item in _score(_terms(task), document)[1] if item not in rationale]
