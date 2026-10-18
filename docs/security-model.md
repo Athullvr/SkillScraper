@@ -21,6 +21,7 @@ Text heuristics inspect for:
 - Obfuscated/encoded execution and direct `curl`/`wget` shell pipelines.
 - Destructive system or device commands.
 - Executable-looking files not referenced by `SKILL.md`.
+- Package manager lifecycle hooks that may run during installation.
 
 These checks are not a comprehensive security scanner. They can miss novel or indirect behavior and can produce false positives. They never establish that a skill is safe.
 

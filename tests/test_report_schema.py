@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from skillscout.models import Report
+from skillscout.models import ErrorReport, Report, SkillInspectionReport
 
 
 def test_checked_in_json_schema_matches_report_model():
@@ -11,6 +11,16 @@ def test_checked_in_json_schema_matches_report_model():
     checked_in = json.loads(schema_path.read_text(encoding="utf-8"))
 
     assert checked_in == Report.model_json_schema(by_alias=True)
+
+
+def test_checked_in_inspection_and_error_schemas_match_models():
+    docs = Path(__file__).parents[1] / "docs"
+    assert json.loads((docs / "inspection.schema.json").read_text(encoding="utf-8")) == (
+        SkillInspectionReport.model_json_schema(by_alias=True)
+    )
+    assert json.loads((docs / "error.schema.json").read_text(encoding="utf-8")) == (
+        ErrorReport.model_json_schema(by_alias=True)
+    )
 
 
 def test_example_report_validates_against_public_report_model():

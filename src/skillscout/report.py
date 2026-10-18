@@ -15,12 +15,13 @@ from skillscout.models import (
     CandidateReport,
     Decision,
     DoctorReport,
+    ErrorReport,
     InspectionEvidence,
     Report,
     SkillInspectionReport,
 )
 
-ModelT = TypeVar("ModelT", Report, SkillInspectionReport, DoctorReport)
+ModelT = TypeVar("ModelT", Report, SkillInspectionReport, DoctorReport, ErrorReport)
 CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
 

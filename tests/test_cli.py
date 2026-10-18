@@ -27,3 +27,15 @@ def test_version_option_works_without_a_subcommand():
 
     assert result.exit_code == 0
     assert result.stdout.strip() == "SkillScout 0.1.0"
+
+
+def test_json_errors_use_the_versioned_error_shape(tmp_path):
+    result = runner.invoke(
+        app,
+        ["recommend", "Implement OAuth login", "--project", str(tmp_path / "missing"), "--format", "json"],
+    )
+
+    assert result.exit_code == 2
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == "1.0"
+    assert payload["error"]["code"] == "input_error"

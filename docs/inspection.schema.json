@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "AuditFinding": {
+      "properties": {
+        "provider": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "status": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Summary",
+          "type": "string"
+        },
+        "auditedAt": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Auditedat"
+        },
+        "riskLevel": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Risklevel"
+        },
+        "categories": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Categories",
+          "type": "array"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        }
+      },
+      "required": [
+        "provider",
+        "status"
+      ],
+      "title": "AuditFinding",
+      "type": "object"
+    },
+    "CatalogSkill": {
+      "description": "A search/listing result with stable catalog provenance.",
+      "properties": {
+        "id": {
+          "maxLength": 500,
+          "minLength": 3,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "slug": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        },
+        "installs": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Installs",
+          "type": "integer"
+        },
+        "sourceType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sourcetype"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "installUrl": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Installurl"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "source",
+        "slug"
+      ],
+      "title": "CatalogSkill",
+      "type": "object"
+    },
+    "Compatibility": {
+      "properties": {
+        "status": {
+          "enum": [
+            "compatible",
+            "partial",
+            "unknown",
+            "incompatible"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "detected_facts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Detected Facts",
+          "type": "array"
+        },
+        "inferred_facts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inferred Facts",
+          "type": "array"
+        },
+        "unknowns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unknowns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "Compatibility",
+      "type": "object"
+    },
+    "Decision": {
+      "enum": [
+        "NO_SKILL_NEEDED",
+        "USE",
+        "REVIEW",
+        "AVOID"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "InspectionEvidence": {
+      "properties": {
+        "content_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Hash"
+        },
+        "files_inspected": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files Inspected",
+          "type": "array"
+        },
+        "inspection_time": {
+          "format": "date-time",
+          "title": "Inspection Time",
+          "type": "string"
+        },
+        "evidence_status": {
+          "default": "unknown",
+          "enum": [
+            "complete",
+            "incomplete",
+            "unknown"
+          ],
+          "title": "Evidence Status",
+          "type": "string"
+        },
+        "external_audit_status": {
+          "default": "none",
+          "enum": [
+            "current",
+            "stale",
+            "unbound",
+            "unavailable",
+            "none"
+          ],
+          "title": "External Audit Status",
+          "type": "string"
+        },
+        "external_audits": {
+          "items": {
+            "$ref": "#/$defs/AuditFinding"
+          },
+          "title": "External Audits",
+          "type": "array"
+        },
+        "local_findings": {
+          "items": {
+            "$ref": "#/$defs/LocalFinding"
+          },
+          "title": "Local Findings",
+          "type": "array"
+        },
+        "evidence_notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Notes",
+          "type": "array"
+        }
+      },
+      "title": "InspectionEvidence",
+      "type": "object"
+    },
+    "LocalFinding": {
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "summary": {
+          "maxLength": 500,
+          "title": "Summary",
+          "type": "string"
+        },
+        "file_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File Path"
+        }
+      },
+      "required": [
+        "check_id",
+        "severity",
+        "summary"
+      ],
+      "title": "LocalFinding",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "skill": {
+      "$ref": "#/$defs/CatalogSkill"
+    },
+    "evidence": {
+      "$ref": "#/$defs/InspectionEvidence"
+    },
+    "compatibility": {
+      "$ref": "#/$defs/Compatibility"
+    },
+    "decision": {
+      "$ref": "#/$defs/Decision"
+    },
+    "decision_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Decision Reasons",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "proposed_install_command": {
+      "title": "Proposed Install Command",
+      "type": "string"
+    }
+  },
+  "required": [
+    "skill",
+    "evidence",
+    "compatibility",
+    "decision",
+    "decision_reasons",
+    "limitations",
+    "proposed_install_command"
+  ],
+  "title": "SkillInspectionReport",
+  "type": "object"
+}

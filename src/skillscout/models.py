@@ -183,6 +183,16 @@ class DoctorReport(BaseModel):
     llm_enabled: bool
 
 
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+
+
+class ErrorReport(BaseModel):
+    schema_version: Literal["1.0"] = "1.0"
+    error: ErrorDetail
+
+
 class SkillInspectionReport(BaseModel):
     schema_version: Literal["1.0"] = "1.0"
     generated_at: datetime = Field(default_factory=utc_now)

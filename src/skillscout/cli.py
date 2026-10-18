@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -34,6 +33,8 @@ from skillscout.models import (
     CatalogSkill,
     Decision,
     DoctorReport,
+    ErrorReport,
+    ErrorDetail,
     ProjectSnapshot,
 )
 from skillscout.llm import LLMAdapter, LLMError, redact_secrets
@@ -317,15 +318,7 @@ def _emit(report, output_format: str) -> None:
 
 def _emit_error(message: str, output_format: str, *, code: str, exit_code: int) -> None:
     if output_format == "json":
-        typer.echo(
-            json.dumps(
-                {
-                    "schema_version": "1.0",
-                    "error": {"code": code, "message": message},
-                },
-                indent=2,
-            )
-        )
+        typer.echo(json_report(ErrorReport(error=ErrorDetail(code=code, message=message))))
     else:
         ERROR_CONSOLE.print(f"[bold red]Error:[/bold red] {escape(message)}")
     raise typer.Exit(code=exit_code)

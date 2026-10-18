@@ -54,6 +54,12 @@ PATTERNS: tuple[tuple[str, Severity, re.Pattern[str], str], ...] = (
         re.compile(r"(?i)(?:curl|wget)\s+[^\n|]{1,250}\|\s*(?:sh|bash)\b"),
         "A downloaded shell script is piped directly to a shell.",
     ),
+    (
+        "package-lifecycle-hook",
+        Severity.MEDIUM,
+        re.compile(r"(?is)\"(?:preinstall|install|postinstall|prepare)\"\s*:"),
+        "A package lifecycle hook can run commands during a package install.",
+    ),
 )
 
 
