@@ -4,9 +4,9 @@
 
 ## Current measurement status
 
-No live SkillScout-versus-catalog comparison was measured on 2026-10-18. The attempted development dependency sync failed because DNS could not resolve `pypi.org`; this environment therefore could not reach the catalog. Every live result, baseline result, comparative decision, latency, and optional provider cost is marked not run in the dataset. The synthetic critical case is covered by deterministic policy tests, but it is not a live-catalog result.
+No live SkillScout-versus-catalog comparison was measured on 2026-10-18. The attempted development dependency sync failed because DNS could not resolve `pypi.org`; this environment therefore could not reach the catalog. Two routine tasks were run through the installed wheel's no-catalog fast path: both returned `NO_SKILL_NEEDED`, with one process wall-time sample of 214.69 ms and 214.60 ms, respectively, and zero optional LLM cost because no provider call was made. These two local cases do not establish broad no-skill accuracy. Their ordinary search baselines and comparative decisions remain unmeasured. The synthetic critical case is covered by deterministic policy tests, but it is not a live-catalog result.
 
-There are no measured top-three relevance, no-skill accuracy, false-recommendation, end-to-end latency, or provider-cost scores. No performance or quality target is proposed here. Do not treat the task hypotheses or unit tests as evidence of real-world selection quality.
+There are no measured top-three relevance, false-recommendation, general no-skill accuracy, catalog-backed end-to-end latency, or nonzero provider-cost scores. No performance or quality target is proposed here. Do not treat the task hypotheses or unit tests as evidence of real-world selection quality.
 
 ## Comparison protocol for a network-enabled run
 

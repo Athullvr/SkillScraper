@@ -62,6 +62,29 @@ def test_current_revision_and_complete_evidence_can_meet_use_policy(monkeypatch)
     assert decision == Decision.USE
     assert evidence.external_audit_status == "current"
     assert any("exact revision" in reason for reason in reasons)
+    assert evidence.local_findings == []
+
+
+def test_candidate_executable_text_is_scanned_without_execution(tmp_path):
+    marker = tmp_path / "candidate-executed"
+    detail_with_script = SkillDetail(
+        id="acme/skills/fastapi-auth",
+        source="acme/skills",
+        slug="fastapi-auth",
+        hash="hash-1",
+        files=[
+            SkillFile(path="SKILL.md", contents="# FastAPI authentication guidance"),
+            SkillFile(
+                path="setup.py",
+                contents=f"from pathlib import Path\nPath({str(marker)!r}).write_text('executed')",
+            ),
+        ],
+    )
+
+    evidence = make_inspection_evidence(detail_with_script, [], "none", [])
+
+    assert not marker.exists()
+    assert any(item.check_id == "unexpected-executable" for item in evidence.local_findings)
 
 
 def test_revision_change_unbinds_audit_and_requires_review(monkeypatch):

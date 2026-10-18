@@ -94,3 +94,5 @@ See [the security model](docs/security-model.md), [limitations](docs/limitations
 
 See the [exploratory evaluation dataset and measurement protocol](docs/evaluation/README.md). Live task-fit and ordinary catalog-search baseline measurements are pending network access; the dataset is not evidence of recommendation accuracy.
 
+See the [current verification snapshot](docs/verification.md) for test, packaging, and network results from the latest audit.
+
