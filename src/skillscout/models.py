@@ -165,7 +165,9 @@ class DoctorReport(BaseModel):
     catalog_url: HttpUrl
     catalog_auth_configured: bool
     candidate_limit: int
-    llm_configured: bool
+    llm_api_key_configured: bool
+    llm_task_text_opt_in: bool
+    llm_enabled: bool
 
 
 class SkillInspectionReport(BaseModel):

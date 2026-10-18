@@ -10,7 +10,7 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import quote
 
 import httpx
-from pydantic import ValidationError
+from pydantic import HttpUrl, ValidationError
 
 from skillscout.config import Config
 from skillscout.models import AuditFinding, CatalogSkill, SkillDetail, utc_now
@@ -89,6 +89,11 @@ class CatalogClient:
                 item = CatalogSkill.model_validate(raw)
                 if item.id != f"{item.source}/{item.slug}":
                     raise CatalogDataError(f"catalog returned an inconsistent stable ID: {item.id}")
+                if item.source_url is None:
+                    encoded = "/".join(
+                        quote(part, safe="") for part in [*item.source.split("/"), item.slug]
+                    )
+                    item.source_url = HttpUrl(f"{self.config.catalog_base_url}/{encoded}")
                 item.retrieved_at = utc_now()
                 results.append(item)
         except ValidationError as exc:
@@ -208,7 +213,11 @@ class CatalogClient:
 
     def _wait_before_retry(self, attempt: int, retry_after: float | None) -> None:
         if retry_after is not None:
-            delay = min(max(retry_after, 0.0), 60.0)
+            if retry_after > 300:
+                raise CatalogUnavailableError(
+                    "catalog Retry-After exceeds the 300-second bounded wait; request was not retried early"
+                )
+            delay = max(retry_after, 0.0)
         else:
             delay = min(0.25 * (2**attempt) + self._random_value() * 0.1, 2.0)
         self._sleep(delay)

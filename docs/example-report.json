@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-18T05:03:45.535429Z",
+  "task": "Add OAuth login to a FastAPI service",
+  "agent": "codex",
+  "project": {
+    "path": "./sample-service",
+    "detected_files": [
+      "pyproject.toml"
+    ],
+    "facts": [
+      "Dependency detected: FastAPI"
+    ],
+    "inferred": [],
+    "unknowns": [
+      "Source files and project scripts were not read or executed."
+    ]
+  },
+  "decision": "REVIEW",
+  "summary": "Best task-fit candidate: FastAPI OAuth Patterns (REVIEW).",
+  "candidates": [
+    {
+      "skill": {
+        "id": "example/agent-skills/fastapi-oauth",
+        "name": "FastAPI OAuth Patterns",
+        "source": "example/agent-skills",
+        "slug": "fastapi-oauth",
+        "installs": 12,
+        "sourceType": "github",
+        "url": "https://skills.sh/example/agent-skills/fastapi-oauth",
+        "installUrl": "https://github.com/example/agent-skills",
+        "hash": "sha256:illustrative-only",
+        "description": null,
+        "retrieved_at": "2026-10-18T05:03:45.535392Z"
+      },
+      "rank": 1,
+      "relevance_score": 0.62,
+      "task_fit_rationale": [
+        "Matching task concepts: fastapi, oauth, authentication."
+      ],
+      "compatibility": {
+        "status": "compatible",
+        "detected_facts": [
+          "Dependency detected: FastAPI"
+        ],
+        "inferred_facts": [
+          "Skill targets fastapi, detected in project metadata."
+        ],
+        "unknowns": [
+          "Runtime and version-specific requirements were not executed or verified."
+        ]
+      },
+      "evidence": {
+        "content_hash": "sha256:illustrative-only",
+        "files_inspected": [
+          "SKILL.md",
+          "scripts/setup.py"
+        ],
+        "inspection_time": "2026-10-18T05:03:45.535411Z",
+        "evidence_status": "complete",
+        "external_audit_status": "none",
+        "external_audits": [],
+        "local_findings": [
+          {
+            "check_id": "unexpected-executable",
+            "severity": "medium",
+            "summary": "Executable-looking content is present but not referenced by SKILL.md.",
+            "file_path": "scripts/setup.py"
+          }
+        ],
+        "evidence_notes": [
+          "No external audit results are available in the catalog."
+        ]
+      },
+      "decision": "REVIEW",
+      "decision_reasons": [
+        "Not established: external audit results are associated with this exact revision.",
+        "Not established: all available revision-bound external audits report pass.",
+        "Not established: no medium or high local heuristic findings require review."
+      ],
+      "limitations": [
+        "Local content checks are heuristic and do not replace a comprehensive security review.",
+        "External audit status is unknown because no result was available.",
+        "One or more local heuristic warnings need human review.",
+        "The proposed install command is inert report text; SkillScout never executes it."
+      ],
+      "proposed_install_command": "npx skills add https://github.com/example/agent-skills --skill fastapi-oauth --agent codex"
+    }
+  ],
+  "limitations": [
+    "Illustrative synthetic evidence; not a live catalog result."
+  ]
+}

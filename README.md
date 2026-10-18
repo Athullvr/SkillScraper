@@ -82,7 +82,7 @@ Catalog requests use explicit connect/read timeouts, response size caps, and bou
 
 Project awareness reads only selected metadata files directly in the project root (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`), checks a short allowlist of lockfiles/config markers, and caps metadata reads at 64 KiB per file. It does not traverse source trees, execute scripts, install dependencies, or upload project source.
 
-The deterministic path sends the task query to skills.sh for search. The optional LLM adapter is disabled unless an API key is configured. Sending task text to the provider additionally requires `SKILLSCOUT_LLM_SEND_TASK=1`; only the task and bounded candidate descriptions are eligible for transmission. Project metadata and source files are not sent.
+The deterministic path sends the task query to skills.sh for search. The optional LLM adapter is disabled unless an API key is configured and `SKILLSCOUT_LLM_SEND_TASK=1` explicitly opts into sending task text. Only the redacted task and bounded candidate description are eligible for transmission. Project metadata and source files are not sent.
 
 ## Security model and limitations
 
@@ -90,5 +90,5 @@ The scanner checks retrieved text for suspicious instruction overrides, credenti
 
 Unknown audit status, unbound audit revisions, missing hashes, incomplete details, and uncertain compatibility remain unknown and lead to `REVIEW`. A hash change prevents old audit evidence from satisfying the current revision gate. External audit providers may have their own gaps. Review the source and audit details before manually installing a skill.
 
-See [the security model](docs/security-model.md), [JSON schema notes](docs/json-schema.md), and [troubleshooting](docs/troubleshooting.md).
+See [the security model](docs/security-model.md), [JSON schema notes](docs/json-schema.md), [an example report](docs/example-report.md), and [troubleshooting](docs/troubleshooting.md).
 

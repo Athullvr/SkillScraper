@@ -190,7 +190,9 @@ def doctor() -> None:
         catalog_url=config.catalog_base_url,
         catalog_auth_configured=bool(config.catalog_token),
         candidate_limit=config.candidate_limit,
-        llm_configured=bool(config.llm_api_key),
+        llm_api_key_configured=bool(config.llm_api_key),
+        llm_task_text_opt_in=config.llm_send_task,
+        llm_enabled=bool(config.llm_api_key and config.llm_send_task),
     )
     render_doctor(report)
     if not report.python_supported:

@@ -62,7 +62,9 @@ def render_doctor(report: DoctorReport, *, console: Console | None = None) -> No
         ("Catalog", str(report.catalog_url)),
         ("Catalog credential", "configured" if report.catalog_auth_configured else "not configured"),
         ("Candidate limit", str(report.candidate_limit)),
-        ("Optional LLM", "configured" if report.llm_configured else "not configured"),
+        ("LLM API key", "configured" if report.llm_api_key_configured else "not configured"),
+        ("Task text opt-in", "enabled" if report.llm_task_text_opt_in else "disabled"),
+        ("Optional LLM path", "enabled" if report.llm_enabled else "disabled"),
     ]
     table = Table(box=box.SIMPLE, show_header=False)
     table.add_column("Check", style="bold")
