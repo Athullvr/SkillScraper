@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from dataclasses import replace
+from typing import Iterator
 
 import httpx
 import pytest
-import respx
 
 from skillscout.llm import LLMAdapter, LLMError, redact_secrets
 
@@ -20,21 +21,40 @@ def provider_response(skill_id: str = "acme/skills/fastapi-auth", content: str |
     }
 
 
+@contextmanager
+def mocked_adapter(config, handler) -> Iterator[LLMAdapter]:
+    expected_url = httpx.URL(f"{config.llm_base_url.rstrip('/')}/chat/completions")
+
+    def dispatch(request):
+        assert request.method == "POST"
+        assert request.url == expected_url
+        return handler(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(dispatch))
+    try:
+        with LLMAdapter(config, client=client) as adapter:
+            yield adapter
+    finally:
+        client.close()
+
+
 def test_llm_sends_only_opted_in_bounded_task_and_candidate(config):
     llm_config = replace(config, llm_api_key="provider-secret", llm_send_task=True)
-    with respx.mock(base_url="https://llm.test") as router:
-        route = router.post("/v1/chat/completions").mock(
-            return_value=httpx.Response(200, json=provider_response())
-        )
-        with LLMAdapter(llm_config) as adapter:
-            assessment = adapter.assess_task_fit(
-                task="Add OAuth login",
-                skill_id="acme/skills/fastapi-auth",
-                skill_name="FastAPI authentication",
-                skill_description="Use OAuth with FastAPI.",
-            )
+    captured = []
 
-    sent = route.calls[0].request.read().decode("utf-8")
+    def handler(request):
+        captured.append(request)
+        return httpx.Response(200, json=provider_response())
+
+    with mocked_adapter(llm_config, handler) as adapter:
+        assessment = adapter.assess_task_fit(
+            task="Add OAuth login",
+            skill_id="acme/skills/fastapi-auth",
+            skill_name="FastAPI authentication",
+            skill_description="Use OAuth with FastAPI.",
+        )
+
+    sent = captured[0].content.decode("utf-8")
     request_payload = json.loads(sent)
     user_content = json.loads(request_payload["messages"][1]["content"])
     assert assessment.score == 0.8
@@ -46,36 +66,40 @@ def test_llm_sends_only_opted_in_bounded_task_and_candidate(config):
 
 def test_llm_is_disabled_without_explicit_task_transmission_opt_in(config):
     llm_config = replace(config, llm_api_key="provider-secret", llm_send_task=False)
-    with respx.mock(base_url="https://llm.test") as router:
-        with LLMAdapter(llm_config) as adapter:
-            assessment = adapter.assess_task_fit(
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=provider_response())
+
+    with mocked_adapter(llm_config, handler) as adapter:
+        assessment = adapter.assess_task_fit(
+            task="task",
+            skill_id="acme/skills/fastapi-auth",
+            skill_name="FastAPI authentication",
+            skill_description="description",
+        )
+
+    assert assessment is None
+    assert calls == []
+
+
+def test_llm_rejects_malformed_structured_output(config):
+    llm_config = replace(config, llm_api_key="provider-secret", llm_send_task=True)
+    with mocked_adapter(
+        llm_config,
+        lambda _request: httpx.Response(
+            200,
+            json=provider_response(content='{"skill_id":"wrong","score":4,"rationale":[]}'),
+        ),
+    ) as adapter:
+        with pytest.raises(LLMError):
+            adapter.assess_task_fit(
                 task="task",
                 skill_id="acme/skills/fastapi-auth",
                 skill_name="FastAPI authentication",
                 skill_description="description",
             )
-
-    assert assessment is None
-    assert not router.calls
-
-
-def test_llm_rejects_malformed_structured_output(config):
-    llm_config = replace(config, llm_api_key="provider-secret", llm_send_task=True)
-    with respx.mock(base_url="https://llm.test") as router:
-        router.post("/v1/chat/completions").mock(
-            return_value=httpx.Response(
-                200,
-                json=provider_response(content='{"skill_id":"wrong","score":4,"rationale":[]}'),
-            )
-        )
-        with LLMAdapter(llm_config) as adapter:
-            with pytest.raises(LLMError):
-                adapter.assess_task_fit(
-                    task="task",
-                    skill_id="acme/skills/fastapi-auth",
-                    skill_name="FastAPI authentication",
-                    skill_description="description",
-                )
 
 
 def test_secret_redaction_masks_tokens_and_assigned_values():
