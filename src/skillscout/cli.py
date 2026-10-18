@@ -38,6 +38,7 @@ from skillscout.models import (
     ProjectSnapshot,
     SkillDetail,
 )
+from skillscout.llm import LLMAdapter, LLMError
 from skillscout.project_context import ProjectContextError, read_project_context
 from skillscout.ranking import (
     RankedSkill,
@@ -82,7 +83,7 @@ def recommend(
             _emit(report, output_format)
             return
 
-        with CatalogClient(config) as catalog:
+        with CatalogClient(config) as catalog, LLMAdapter(config) as llm:
             search_results = catalog.search(task, limit=min(50, max(10, config.candidate_limit * 6)))
             if not search_results:
                 report = no_skill_report(
@@ -99,7 +100,7 @@ def recommend(
             candidate_reports = []
             for item in ranked:
                 candidate_reports.append(
-                    _inspect_candidate(catalog, item, task, agent, project_context)
+                    _inspect_candidate(catalog, item, task, agent, project_context, llm)
                 )
             candidate_reports.sort(key=lambda item: item.relevance_score, reverse=True)
             candidate_reports = [
@@ -211,6 +212,7 @@ def _inspect_candidate(
     task: str,
     agent: str,
     project: ProjectSnapshot,
+    llm: LLMAdapter,
 ):
     try:
         detail = catalog.get_detail(ranked.skill)
@@ -230,6 +232,29 @@ def _inspect_candidate(
         update={"content_hash": detail.content_hash or ranked.skill.content_hash}
     )
     refined = refine_rank(task, ranked, detail)
+    llm_failure = False
+    try:
+        skill_document = next(
+            (item.contents for item in (detail.files or []) if item.path.lower() == "skill.md"),
+            "",
+        )
+        assessment = llm.assess_task_fit(
+            task=task,
+            skill_id=skill.id,
+            skill_name=skill.name,
+            skill_description=skill.description or skill_document,
+        )
+        if assessment is not None:
+            refined = RankedSkill(
+                skill=skill,
+                score=round(refined.score * 0.75 + assessment.score * 0.25, 3),
+                rationale=[
+                    *refined.rationale,
+                    *[f"Optional LLM task-fit suggestion: {reason}" for reason in assessment.rationale],
+                ],
+            )
+    except LLMError:
+        llm_failure = True
     audits, audit_status, audit_notes = catalog.get_audits(skill)
     evidence = make_inspection_evidence(
         detail,
@@ -239,7 +264,7 @@ def _inspect_candidate(
         catalog_hash=ranked.skill.content_hash,
     )
     compatibility = evaluate_compatibility(skill, detail, project)
-    return build_candidate_report(
+    candidate = build_candidate_report(
         skill=skill,
         rank=1,
         relevance_score=refined.score,
@@ -248,6 +273,9 @@ def _inspect_candidate(
         evidence=evidence,
         agent=agent,
     )
+    if llm_failure:
+        candidate.limitations.append("Optional LLM assessment failed; deterministic task-fit ranking was used.")
+    return candidate
 
 
 def _placeholder_skill(skill_id: str, catalog_base_url: str) -> CatalogSkill:

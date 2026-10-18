@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass
 
@@ -19,6 +18,10 @@ FRAMEWORKS = {
     "react", "nextjs", "next", "vue", "nuxt", "angular", "svelte", "astro", "django", "fastapi",
     "flask", "starlette", "sqlalchemy", "pydantic", "express", "nestjs", "nodejs", "python", "typescript",
 }
+EXCLUSIVE_FRAMEWORK_GROUPS = (
+    {"react", "vue", "angular", "svelte", "astro"},
+    {"django", "fastapi", "flask"},
+)
 ALIASES = {
     "oauth": {"auth", "authentication", "authorization"},
     "auth": {"oauth", "authentication", "authorization"},
@@ -118,14 +121,30 @@ def evaluate_compatibility(
             unknowns=["Runtime and version-specific requirements were not executed or verified."],
         )
 
-    if project_terms:
-        target_text = ", ".join(sorted(targets))
-        project_text = ", ".join(sorted(project_terms))
+    conflicting_group = next(
+        (
+            group
+            for group in EXCLUSIVE_FRAMEWORK_GROUPS
+            if targets & group and project_terms & group and not targets & project_terms & group
+        ),
+        None,
+    )
+    if conflicting_group:
+        target_text = ", ".join(sorted(targets & conflicting_group))
+        project_text = ", ".join(sorted(project_terms & conflicting_group))
         return Compatibility(
             status="incompatible",
             detected_facts=known_facts,
             inferred_facts=[f"Skill targets {target_text}; detected project stack is {project_text}."],
             unknowns=["No source files were inspected to confirm whether these stacks are intentionally mixed."],
+        )
+
+    if project_terms:
+        return Compatibility(
+            status="partial",
+            detected_facts=known_facts,
+            inferred_facts=[f"Skill names {', '.join(sorted(targets))}; no direct matching dependency was detected."],
+            unknowns=["Detected project facts do not establish whether the skill's prerequisites are met."],
         )
 
     return Compatibility(
@@ -165,18 +184,9 @@ def _score(task_terms: set[str], searchable: str) -> tuple[float, list[str]]:
     if not matches:
         return 0.0, []
     coverage = len(matches) / len(task_terms)
-    phrase_bonus = 0.15 if len(matches) >= 2 and _contains_task_phrase(task_terms, searchable) else 0.0
-    score = min(1.0, coverage * 0.78 + phrase_bonus)
+    score = min(1.0, coverage * 0.78)
     rationale = [f"Matching task concepts: {', '.join(sorted(matches))}."]
-    if phrase_bonus:
-        rationale.append("The task concepts appear together in the candidate description or skill text.")
     return score, rationale
-
-
-def _contains_task_phrase(task_terms: set[str], searchable: str) -> bool:
-    # Phrase matching is a small signal only; content may contain prompt text as well as metadata.
-    content_terms = _terms(searchable)
-    return len(task_terms & content_terms) >= 2 and len(task_terms) <= 5
 
 
 def _terms(value: str) -> set[str]:
@@ -202,5 +212,9 @@ def _project_framework_terms(project: ProjectSnapshot) -> set[str]:
         terms.add("python")
     if "node.js" in text or "node project" in text:
         terms.update({"nodejs", "typescript"})
+    if terms & {"django", "fastapi", "flask", "starlette", "sqlalchemy", "pytest"}:
+        terms.add("python")
+    if terms & {"react", "next", "nextjs", "vue", "nuxt", "angular", "svelte", "astro", "express", "nestjs"}:
+        terms.add("nodejs")
     return terms & FRAMEWORKS
 

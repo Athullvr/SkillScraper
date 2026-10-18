@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import TypeVar
 
 from rich import box
@@ -25,7 +24,7 @@ ModelT = TypeVar("ModelT", Report, SkillInspectionReport, DoctorReport)
 
 def json_report(model: ModelT) -> str:
     """Serialize a validated report without mixing terminal formatting into stdout."""
-    return model.model_dump_json(indent=2, by_alias=False)
+    return model.model_dump_json(indent=2, by_alias=True)
 
 
 def render_recommendation(report: Report, *, console: Console | None = None) -> None:
