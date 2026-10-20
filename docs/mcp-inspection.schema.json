@@ -111,6 +111,63 @@
       "title": "MCPAuditEvidence",
       "type": "object"
     },
+    "MCPEvidenceStatus": {
+      "properties": {
+        "category": {
+          "enum": [
+            "skill_identity_source",
+            "content_inspection",
+            "content_revision",
+            "external_audit",
+            "security_scan",
+            "project_compatibility",
+            "task_relevance"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "catalog_metadata",
+            "complete",
+            "incomplete",
+            "unknown",
+            "hash_present",
+            "missing",
+            "current_passing",
+            "current_findings",
+            "stale",
+            "mismatched",
+            "unbound",
+            "unavailable",
+            "none",
+            "no_findings_detected",
+            "findings",
+            "critical_findings",
+            "compatible",
+            "partial",
+            "incompatible",
+            "sufficient",
+            "below_threshold",
+            "not_assessed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 400,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "status",
+        "summary"
+      ],
+      "title": "MCPEvidenceStatus",
+      "type": "object"
+    },
     "MCPInspectionEvidence": {
       "properties": {
         "content_hash": {
@@ -309,6 +366,71 @@
       "title": "MCPToolError",
       "type": "object"
     },
+    "MCPUnresolvedEvidence": {
+      "properties": {
+        "category": {
+          "enum": [
+            "skill_identity_source",
+            "content_inspection",
+            "content_revision",
+            "external_audit",
+            "security_scan",
+            "project_compatibility",
+            "task_relevance"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "catalog_metadata",
+            "complete",
+            "incomplete",
+            "unknown",
+            "hash_present",
+            "missing",
+            "current_passing",
+            "current_findings",
+            "stale",
+            "mismatched",
+            "unbound",
+            "unavailable",
+            "none",
+            "no_findings_detected",
+            "findings",
+            "critical_findings",
+            "compatible",
+            "partial",
+            "incompatible",
+            "sufficient",
+            "below_threshold",
+            "not_assessed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "title": "Reason",
+          "type": "string"
+        },
+        "next_steps": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Next Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "category",
+        "status",
+        "reason"
+      ],
+      "title": "MCPUnresolvedEvidence",
+      "type": "object"
+    },
     "Severity": {
       "enum": [
         "info",
@@ -391,6 +513,30 @@
         "type": "string"
       },
       "title": "Uncertainties",
+      "type": "array"
+    },
+    "evidence_status": {
+      "items": {
+        "$ref": "#/$defs/MCPEvidenceStatus"
+      },
+      "maxItems": 7,
+      "title": "Evidence Status",
+      "type": "array"
+    },
+    "unresolved_evidence": {
+      "items": {
+        "$ref": "#/$defs/MCPUnresolvedEvidence"
+      },
+      "maxItems": 7,
+      "title": "Unresolved Evidence",
+      "type": "array"
+    },
+    "next_steps": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Next Steps",
       "type": "array"
     },
     "next_action": {

@@ -22,10 +22,12 @@ from skillscout.decision import (
 )
 from skillscout.llm import LLMAdapter, LLMError, redact_secrets
 from skillscout.models import (
+    CandidateReport,
     CatalogSkill,
     DoctorReport,
     ProjectSnapshot,
     Report,
+    SkillDetail,
     SkillInspectionReport,
 )
 from skillscout.project_context import read_project_context
@@ -65,6 +67,8 @@ def prepare_recommendation(
     project_context_reader: Callable[[str | Path], ProjectSnapshot] | None = None,
     catalog_client_factory: Callable[[Config], CatalogClient] | None = None,
     llm_adapter_factory: Callable[[Config], LLMAdapter] | None = None,
+    detail_observer: Callable[[CandidateReport, SkillDetail, str, ProjectSnapshot], None]
+    | None = None,
 ) -> Report:
     """Run the canonical recommendation workflow and return its validated report.
 
@@ -111,7 +115,10 @@ def prepare_recommendation(
 
         ranked = rank_catalog_results(task, search_results)[: config.candidate_limit]
         candidate_reports = [
-            _inspect_candidate(catalog, item, task, agent, project, llm) for item in ranked
+            _inspect_candidate(
+                catalog, item, task, agent, project, llm, detail_observer=detail_observer
+            )
+            for item in ranked
         ]
         candidate_reports.sort(key=lambda item: item.relevance_score, reverse=True)
         candidate_reports = [
@@ -190,6 +197,9 @@ def _inspect_candidate(
     agent: str,
     project: ProjectSnapshot,
     llm: LLMAdapter | None,
+    *,
+    detail_observer: Callable[[CandidateReport, SkillDetail, str, ProjectSnapshot], None]
+    | None = None,
 ):
     try:
         detail = catalog.get_detail(ranked.skill)
@@ -256,6 +266,8 @@ def _inspect_candidate(
         evidence=evidence,
         agent=agent,
     )
+    if detail_observer is not None:
+        detail_observer(candidate, detail, task, project)
     if llm_failure:
         candidate.limitations.append(
             "Optional LLM assessment failed; deterministic task-fit ranking was used."

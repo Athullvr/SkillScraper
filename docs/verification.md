@@ -1,4 +1,62 @@
-# Final verification snapshot
+# Verification snapshots
+
+## SkillScout v2 evidence packet update
+
+**Checked:** 2026-10-20. This snapshot covers actionable evidence explanations and task-scoped MCP excerpts.
+
+### Tests, lint, and format
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
+Result: **107 passed, 0 failed, 0 skipped**. The suite uses fixtures and mocked catalog transports; it does not require credentials or live catalog access.
+
+Ruff was not installed or declared in the project dev extra, so it was run temporarily from the package cache without changing project dependencies:
+
+```bash
+UV_CACHE_DIR=/tmp/skillscout-v2-uv-cache uv run --with ruff ruff check src/skillscout/application.py src/skillscout/mcp_models.py src/skillscout/mcp_server.py src/skillscout/ranking.py src/skillscout/evidence_explanations.py src/skillscout/evidence_packet.py tests/test_mcp_server.py
+UV_CACHE_DIR=/tmp/skillscout-v2-uv-cache uv run --with ruff ruff format --check src/skillscout/application.py src/skillscout/mcp_models.py src/skillscout/mcp_server.py src/skillscout/ranking.py src/skillscout/evidence_explanations.py src/skillscout/evidence_packet.py tests/test_mcp_server.py
+```
+
+Both passed: Ruff reported all checks passed and seven files already formatted.
+
+### Build, CLI, and MCP
+
+```bash
+UV_CACHE_DIR=/tmp/skillscout-v2-uv-cache uv build --out-dir /tmp/skillscout-v2-final2-wheel
+UV_CACHE_DIR=/tmp/skillscout-v2-uv-cache uv pip install --target /tmp/skillscout-v2-final2-target --no-deps /tmp/skillscout-v2-final2-wheel/skillscout-0.1.0-py3-none-any.whl
+```
+
+The build produced the source archive and wheel. The wheel was installed into a temporary target using the runtime dependencies already present in the project virtual environment; this was not a fresh dependency-resolution install.
+
+Installed-wheel checks from `/tmp` confirmed the package loaded from `/tmp/skillscout-v2-final2-target`, MCP tool discovery returned `doctor`, `inspect_skill`, and `prepare_task`, and a routine task returned `NO_SKILL_NEEDED`. Starting the installed `skillscout mcp` process left it running with empty stdout and stderr before a client connected. In-process MCP SDK tests also passed in the full suite.
+
+The SDK `stdio_client` initialization did **not** complete in this environment: `initialize` timed out after five seconds for both the installed SkillScout server and a minimal MCP SDK stdio server. This indicates the local stdio test harness/runtime could not complete the wire handshake; a successful end-to-end stdio handshake is not claimed here.
+
+These CLI commands were run:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m skillscout --help
+PYTHONPATH=src .venv/bin/python -m skillscout --version
+PYTHONPATH=src .venv/bin/python -m skillscout doctor
+PYTHONPATH=src .venv/bin/python -m skillscout recommend 'Fix a typo in README' --format json
+PYTHONPATH=src .venv/bin/python -m skillscout inspect owner/../repo/skill --format json
+```
+
+Help, version, doctor, and routine recommendation exited 0; the routine recommendation was `NO_SKILL_NEEDED`. The invalid inspect ID returned the versioned `input_error` JSON and exited 2. Existing CLI behavior remained covered by the full regression suite.
+
+### Catalog authentication
+
+An unauthenticated read-only request to the documented skills.sh search route returned **HTTP 401**, JSON error code `authentication_required`. The initial sandboxed probe failed DNS; the same request was retried with network permission and returned the 401 response. No credentials were available, so authorized search/detail/audit behavior was not tested.
+
+The current [skills.sh API reference](https://www.skills.sh/docs/api) documents bearer authentication for API requests and explicitly requires it for audits; no unauthenticated search/detail path is documented. It documents Vercel OIDC as the credential path. Vercel's [OIDC setup documentation](https://vercel.com/docs/oidc) describes linking a local project and using `vercel env pull` for a short-lived `VERCEL_OIDC_TOKEN`. SkillScout reads that variable from its process environment; it does not load `.env.local` or refresh the token. Fixture-based tests remain independent of credentials and external access.
+
+No dependency, lockfile, or installation behavior changes were made. No live catalog result, skill content, hash, or audit evidence was verified. No install command was executed.
+
+---
+
+## Earlier verification snapshot (2026-10-18)
 
 **Checked:** 2026-10-18. This records commands run against the current working tree. The pre-existing edits in the evaluation docs, implementation notes, verification notes, `pyproject.toml`, and catalog/LLM tests were reviewed and preserved. `uv.lock` was generated during this verification.
 

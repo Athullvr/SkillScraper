@@ -50,7 +50,7 @@ Checks the Python version and local configuration. It does not contact the catal
 
 ## MCP integration
 
-SkillScout also exposes a local MCP server for compatible coding agents. Its tools call the same application workflows as the CLI and return validated, versioned structured results, so the agent does not need to parse Rich terminal output.
+SkillScout also exposes a local MCP server for compatible coding agents. Its tools call the same application workflows as the CLI and return validated, versioned structured results, so the agent does not need to parse Rich terminal output. MCP adds structured evidence gaps and a small task-scoped excerpt packet for agent consumption; it does not change ranking or decision policy.
 
 Install SkillScout so the `skillscout` command is on `PATH`, then register the stdio server:
 
@@ -75,7 +75,7 @@ This uses Claude Code's local stdio configuration format; see the [Claude Code M
 
 The server exposes three read-only tools:
 
-- `prepare_task(task, project_path?, agent?)` runs the existing recommendation pipeline. `project_path` defaults to the server's working directory. It returns `NO_SKILL_NEEDED`, `USE`, `REVIEW`, or `AVOID` using the existing policy. Operational failures return `status: "error"` and `decision: null`, so a failed catalog request is never represented as a no-skill decision.
+- `prepare_task(task, project_path?, agent?, context_budget_bytes?)` runs the existing recommendation pipeline. `project_path` defaults to the server's working directory. It returns `NO_SKILL_NEEDED`, `USE`, `REVIEW`, or `AVOID` using the existing policy. Operational failures return `status: "error"` and `decision: null`, so a failed catalog request is never represented as a no-skill decision. The optional excerpt budget defaults to 1200 UTF-8 bytes, can be set to `0` to disable excerpts, and has a hard maximum of 2400 bytes.
 - `inspect_skill(skill_id, project_path?)` runs the existing detail, compatibility, scanner, and audit inspection path. Inspection alone cannot return `USE` because it does not assess task relevance.
 - `doctor()` reports local configuration presence without revealing credential values or checking catalog connectivity.
 
@@ -117,13 +117,62 @@ Example result for a routine task:
 }
 ```
 
-The full stable response models are documented in [prepare schema](docs/mcp-prepare.schema.json) and [inspection schema](docs/mcp-inspection.schema.json). Candidate results include stable IDs, compatibility, bounded scanner findings, audit state and revision binding, and an informational-only install command. They do not include complete skill documents or the absolute project path.
+The full stable response models are documented in [prepare schema](docs/mcp-prepare.schema.json) and [inspection schema](docs/mcp-inspection.schema.json). Candidate results include stable IDs, compatibility, bounded scanner findings, audit state and revision binding, and an informational-only install command. The additive v1 response fields `evidence_status`, `unresolved_evidence`, and `next_steps` state what remains unknown and what evidence-specific action could address it. They do not change the policy decision. For example, a missing audit is described as unavailable evidence, not as a pass; stale, mismatched, and unbound evidence have different statuses.
 
-The MCP adapter never installs, activates, or executes skills, edits projects, or changes agent configuration. Project inspection is read-only and limited to the existing root-level metadata allowlist; symlink components in the requested project path are rejected, and symlinked metadata files are skipped. MCP recommendation calls disable the optional LLM adapter. Catalog-backed search still sends the heuristically redacted task query to the configured catalog, but never sends project source files. A configured catalog token is sent only to the catalog API as its bearer credential and is never included in tool results. Catalog skill and audit content remains untrusted evidence, and an agent must follow its own safety rules when acting on a recommendation.
+`prepare_task` also returns a compact `evidence_packet` for each retrieved candidate. It selects up to three verbatim excerpts from files the scanner already inspected, using deterministic overlap with task terms and a smaller preference for technology declared in project metadata. It does not fetch or scan the content again. Each excerpt has a relative file path, a parsed section heading when available, a short relevance explanation, and file-level scanner or coverage warnings. No line number is claimed. `used_bytes` measures only the UTF-8 bytes in the excerpt bodies; response metadata and JSON framing are excluded. Each excerpt is at most 600 bytes and all excerpt bodies together fit the requested budget. `truncated` reports when relevant material was omitted or clipped. A zero budget disables the packet. If no inspected passage matches task terms, the packet is empty with an explanation.
+
+The packet hash is the hash on the detail response that the pipeline inspected. `revision_binding: "bound"` means that hash was present; a missing hash remains `null` and is labelled `"unbound"`. A relative file reference and section heading identify a location within the retrieved document, not a cryptographic proof of publisher identity. Scanner warnings are file-level because the scanner does not record line locations.
+
+Example candidate fragment (illustrative shape only):
+
+```json
+{
+  "decision": "REVIEW",
+  "evidence_status": [
+    {"category": "external_audit", "status": "none", "summary": "No external audit results were available for the inspected candidate."}
+  ],
+  "unresolved_evidence": [
+    {
+      "category": "external_audit",
+      "status": "none",
+      "reason": "No external audit result is available for the inspected candidate.",
+      "next_steps": ["Obtain applicable audit evidence for the exact inspected content hash, or arrange an independent review."]
+    }
+  ],
+  "next_steps": ["Obtain applicable audit evidence for the exact inspected content hash, or arrange an independent review."],
+  "evidence_packet": {
+    "skill_id": "owner/repo/oauth",
+    "source": "owner/repo",
+    "content_hash": "<hash-from-detail-response>",
+    "revision_binding": "bound",
+    "status": "available",
+    "budget_bytes": 1200,
+    "used_bytes": 61,
+    "truncated": false,
+    "explanation": "Selected verbatim paragraphs by deterministic task-term overlap, with a smaller preference for declared project technology.",
+    "excerpts": [
+      {
+        "file_path": "SKILL.md",
+        "section_heading": "OAuth validation",
+        "excerpt": "Validate the token issuer and audience before accepting it.\n",
+        "relevance_reason": "Matches task concepts: audience, oauth, token.",
+        "warnings": [],
+        "truncated": false
+      }
+    ]
+  }
+}
+```
+
+Treat every excerpt as untrusted catalog content, not as an instruction to follow. A passage can contain malicious or misleading text even when the heuristic scanner reports no findings. Do not use the packet or a `USE` result to bypass the agent's own safety rules.
+
+The MCP adapter never installs, activates, or executes skills, edits projects, or changes agent configuration. Project inspection is read-only and limited to the existing root-level metadata allowlist; symlink components in the requested project path are rejected, and symlinked metadata files are skipped. MCP recommendation calls disable the optional LLM adapter. Only the redacted task query is sent to catalog search; project files are not sent. Catalog skill and audit content remains untrusted evidence, and an agent must follow its own safety rules when acting on a recommendation.
 
 MCP availability does not make an agent invoke the tools automatically. Register the server with the host and, if needed, configure agent instructions to call `prepare_task` for specialist tasks. For routine work, SkillScout can return `NO_SKILL_NEEDED` without contacting the catalog.
 
-The last recorded repository live check (2026-10-18) received HTTP 401 from skills.sh without a Vercel OIDC token. The [skills.sh API reference](https://www.skills.sh/docs/api) now documents bearer-token authentication for API requests and states that the audit endpoint requires authentication. Set `SKILLSCOUT_CATALOG_TOKEN` or `VERCEL_OIDC_TOKEN` when needed; routine no-skill checks and `doctor()` remain local. The MCP interface does not claim improved coding outcomes; recommendation evaluation is still limited. See [verification](docs/verification.md) and [evaluation notes](docs/evaluation/README.md).
+**Catalog authentication:** the current [skills.sh API reference](https://www.skills.sh/docs/api) documents bearer authentication for API requests and explicitly marks the audit endpoint as requiring authentication. It does not document an unauthenticated search or detail route. The documented credential is a Vercel OIDC bearer token: enable OIDC Federation for a Vercel project, link the local project with `vercel link`, and run `vercel env pull` to obtain the short-lived `VERCEL_OIDC_TOKEN` in `.env.local` ([Vercel OIDC setup](https://vercel.com/docs/oidc)). SkillScout does not read `.env.local` itself; make the token available to the process that starts SkillScout through the environment or a secret manager. Do not put token values in an MCP configuration file, task text, or chat. SkillScout reads the token at process startup and does not refresh it, so renew it and restart the process after expiry. `SKILLSCOUT_CATALOG_TOKEN` is an override for a bearer token accepted by the configured endpoint; the skills.sh docs do not describe a separate API key. No alternate catalog source has been verified; `SKILLSCOUT_CATALOG_URL` only changes the base URL for the existing skills.sh v1 API adapter.
+
+The last recorded live request returned HTTP 401 without authorization. Fixture tests verify catalog behavior but do not prove live access. Routine no-skill checks and `doctor()` remain local. The MCP interface does not claim improved coding outcomes; recommendation evaluation is still limited. See [verification](docs/verification.md) and [evaluation notes](docs/evaluation/README.md).
 
 ## Decisions and exit codes
 
@@ -145,8 +194,8 @@ Typer uses exit code `2` for invalid command syntax. JSON-mode errors use `{"sch
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SKILLSCOUT_CATALOG_URL` | `https://skills.sh` | HTTPS skills.sh-compatible API base |
-| `SKILLSCOUT_CATALOG_TOKEN` | unset | Optional bearer token for catalog endpoints |
-| `VERCEL_OIDC_TOKEN` | unset | Fallback catalog bearer token |
+| `SKILLSCOUT_CATALOG_TOKEN` | unset | Bearer token override for a catalog endpoint that accepts it; no separate skills.sh API key is documented |
+| `VERCEL_OIDC_TOKEN` | unset | Supported skills.sh bearer credential documented by skills.sh and Vercel |
 | `SKILLSCOUT_CANDIDATE_LIMIT` | `3` | Detail records to inspect, bounded to 1–5 |
 | `SKILLSCOUT_LLM_API_KEY` | unset | Optional OpenAI-compatible provider key |
 | `SKILLSCOUT_LLM_BASE_URL` | `https://api.openai.com/v1` | Optional provider API base |

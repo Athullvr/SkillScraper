@@ -8,15 +8,81 @@ from dataclasses import dataclass
 from skillscout.models import CatalogSkill, Compatibility, ProjectSnapshot, SkillDetail
 
 STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "i", "in",
-    "into", "is", "it", "make", "my", "of", "on", "or", "our", "please", "that", "the",
-    "this", "to", "use", "using", "we", "with", "you", "your", "implement", "build", "add",
-    "create", "write", "update", "fix", "help", "need", "want", "task", "project",
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "how",
+    "i",
+    "in",
+    "into",
+    "is",
+    "it",
+    "make",
+    "my",
+    "of",
+    "on",
+    "or",
+    "our",
+    "please",
+    "that",
+    "the",
+    "this",
+    "to",
+    "use",
+    "using",
+    "we",
+    "with",
+    "you",
+    "your",
+    "implement",
+    "build",
+    "add",
+    "create",
+    "write",
+    "update",
+    "fix",
+    "help",
+    "need",
+    "want",
+    "task",
+    "project",
 }
-GENERIC_SKILL_TERMS = {"assistant", "coding", "code", "developer", "general", "programming", "software"}
+GENERIC_SKILL_TERMS = {
+    "assistant",
+    "coding",
+    "code",
+    "developer",
+    "general",
+    "programming",
+    "software",
+}
 FRAMEWORKS = {
-    "react", "nextjs", "next", "vue", "nuxt", "angular", "svelte", "astro", "django", "fastapi",
-    "flask", "starlette", "sqlalchemy", "pydantic", "express", "nestjs", "nodejs", "python", "typescript",
+    "react",
+    "nextjs",
+    "next",
+    "vue",
+    "nuxt",
+    "angular",
+    "svelte",
+    "astro",
+    "django",
+    "fastapi",
+    "flask",
+    "starlette",
+    "sqlalchemy",
+    "pydantic",
+    "express",
+    "nestjs",
+    "nodejs",
+    "python",
+    "typescript",
 }
 EXCLUSIVE_FRAMEWORK_GROUPS = (
     {"react", "vue", "angular", "svelte", "astro"},
@@ -50,12 +116,16 @@ def rank_catalog_results(task: str, skills: list[CatalogSkill]) -> list[RankedSk
     task_terms = _terms(task)
     ranked: list[RankedSkill] = []
     for index, skill in enumerate(skills):
-        searchable = " ".join((skill.name, skill.slug.replace("-", " "), skill.source, skill.description or ""))
+        searchable = " ".join(
+            (skill.name, skill.slug.replace("-", " "), skill.source, skill.description or "")
+        )
         score, rationale = _score(task_terms, searchable)
         generic_terms = _terms(f"{skill.name} {skill.slug}") & GENERIC_SKILL_TERMS
         if generic_terms:
             score = max(0.0, score - 0.12)
-            rationale.append("Generic skill wording adds little beyond an agent's ordinary coding capability.")
+            rationale.append(
+                "Generic skill wording adds little beyond an agent's ordinary coding capability."
+            )
         # Catalog order is a weak tie-break signal and never creates task relevance by itself.
         if score > 0:
             order_bonus = max(0.0, 0.03 - index * 0.003)
@@ -71,9 +141,7 @@ def rank_catalog_results(task: str, skills: list[CatalogSkill]) -> list[RankedSk
 def refine_rank(task: str, ranked: RankedSkill, detail: SkillDetail) -> RankedSkill:
     """Refine task match from bounded catalog skill text without affecting security policy."""
     document = "\n".join(
-        file.contents[:5_000]
-        for file in (detail.files or [])
-        if file.path.lower() == "skill.md"
+        file.contents[:5_000] for file in (detail.files or []) if file.path.lower() == "skill.md"
     )
     if not document:
         return ranked
@@ -86,6 +154,31 @@ def refine_rank(task: str, ranked: RankedSkill, detail: SkillDetail) -> RankedSk
     additional = [item for item in _score(_terms(task), document)[1] if item not in rationale]
     rationale.extend(additional[:2])
     return RankedSkill(skill=ranked.skill, score=round(score, 3), rationale=rationale)
+
+
+def evidence_excerpt_match(
+    task: str,
+    project: ProjectSnapshot,
+    excerpt: str,
+) -> tuple[float, list[str], list[str]]:
+    """Score an excerpt using the same deterministic terms as catalog ranking.
+
+    Task overlap is the primary signal. Declared project metadata adds a smaller
+    preference for technology-specific passages. Returned terms are the actual
+    normalized overlaps used to explain selection.
+    """
+    task_terms = _terms(task)
+    project_terms = _terms(" ".join(project.facts))
+    excerpt_terms = _terms(excerpt)
+    task_matches = sorted(task_terms & excerpt_terms)
+    project_matches = sorted(project_terms & excerpt_terms)
+    if not task_matches:
+        return 0.0, [], []
+
+    task_coverage = len(task_matches) / len(task_terms) if task_terms else 0.0
+    project_coverage = len(project_matches) / len(project_terms) if project_terms else 0.0
+    score = task_coverage * 0.85 + project_coverage * 0.15
+    return round(score, 6), task_matches, project_matches
 
 
 def evaluate_compatibility(
@@ -123,7 +216,9 @@ def evaluate_compatibility(
         return Compatibility(
             status="compatible",
             detected_facts=known_facts,
-            inferred_facts=[f"Skill targets {', '.join(sorted(matches))}, detected in project metadata."],
+            inferred_facts=[
+                f"Skill targets {', '.join(sorted(matches))}, detected in project metadata."
+            ],
             unknowns=["Runtime and version-specific requirements were not executed or verified."],
         )
 
@@ -141,16 +236,24 @@ def evaluate_compatibility(
         return Compatibility(
             status="incompatible",
             detected_facts=known_facts,
-            inferred_facts=[f"Skill targets {target_text}; detected project stack is {project_text}."],
-            unknowns=["No source files were inspected to confirm whether these stacks are intentionally mixed."],
+            inferred_facts=[
+                f"Skill targets {target_text}; detected project stack is {project_text}."
+            ],
+            unknowns=[
+                "No source files were inspected to confirm whether these stacks are intentionally mixed."
+            ],
         )
 
     if project_terms:
         return Compatibility(
             status="partial",
             detected_facts=known_facts,
-            inferred_facts=[f"Skill names {', '.join(sorted(targets))}; no direct matching dependency was detected."],
-            unknowns=["Detected project facts do not establish whether the skill's prerequisites are met."],
+            inferred_facts=[
+                f"Skill names {', '.join(sorted(targets))}; no direct matching dependency was detected."
+            ],
+            unknowns=[
+                "Detected project facts do not establish whether the skill's prerequisites are met."
+            ],
         )
 
     return Compatibility(
@@ -171,10 +274,10 @@ def task_is_routine(task: str) -> bool:
         r"\b(?:add|write) (?:a |one )?(?:simple )?(?:unit )?test\b",
         r"\bupdate (?:the )?(?:readme|comment|docstring)\b",
     )
-    if any(re.search(pattern, normalized) for pattern in routine_patterns):
-        if not re.search(r"\b(?:security|migration|kubernetes|terraform|oauth|accessibility|performance)\b", normalized):
-            return True
-    return False
+    return any(re.search(pattern, normalized) for pattern in routine_patterns) and not re.search(
+        r"\b(?:security|migration|kubernetes|terraform|oauth|accessibility|performance)\b",
+        normalized,
+    )
 
 
 def relevance_threshold() -> float:
@@ -220,7 +323,17 @@ def _project_framework_terms(project: ProjectSnapshot) -> set[str]:
         terms.update({"nodejs", "typescript"})
     if terms & {"django", "fastapi", "flask", "starlette", "sqlalchemy", "pytest"}:
         terms.add("python")
-    if terms & {"react", "next", "nextjs", "vue", "nuxt", "angular", "svelte", "astro", "express", "nestjs"}:
+    if terms & {
+        "react",
+        "next",
+        "nextjs",
+        "vue",
+        "nuxt",
+        "angular",
+        "svelte",
+        "astro",
+        "express",
+        "nestjs",
+    }:
         terms.add("nodejs")
     return terms & FRAMEWORKS
-

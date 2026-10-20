@@ -21,8 +21,14 @@ from skillscout.catalog import (
     CatalogUnavailableError,
 )
 from skillscout.config import ConfigurationError
+from skillscout.evidence_explanations import explain_candidate, explain_inspection
+from skillscout.evidence_packet import (
+    DEFAULT_EVIDENCE_PACKET_BYTES,
+    build_evidence_packet,
+)
 from skillscout.llm import redact_secrets
 from skillscout.mcp_models import (
+    MAX_EVIDENCE_PACKET_BYTES,
     InspectSkillResult,
     MCPAuditEvidence,
     MCPDoctorResult,
@@ -32,10 +38,18 @@ from skillscout.mcp_models import (
     MCPProjectContext,
     MCPRecommendation,
     MCPSkillIdentity,
+    MCPTaskEvidencePacket,
     MCPToolError,
     PrepareTaskResult,
 )
-from skillscout.models import CandidateReport, Decision, InspectionEvidence, SkillInspectionReport
+from skillscout.models import (
+    CandidateReport,
+    Decision,
+    InspectionEvidence,
+    ProjectSnapshot,
+    SkillDetail,
+    SkillInspectionReport,
+)
 from skillscout.project_context import ProjectContextError
 
 MAX_TASK_CHARS = 4_000
@@ -75,6 +89,18 @@ async def prepare_task(
             description="Agent identifier using letters, digits, dots, underscores, or hyphens; defaults to codex."
         ),
     ] = "codex",
+    context_budget_bytes: Annotated[
+        int,
+        Field(
+            ge=0,
+            le=MAX_EVIDENCE_PACKET_BYTES,
+            strict=True,
+            description=(
+                "UTF-8 byte budget for excerpt bodies; 0 disables the packet. Defaults to "
+                "1200 bytes, with a hard maximum of 2400."
+            ),
+        ),
+    ] = DEFAULT_EVIDENCE_PACKET_BYTES,
 ) -> PrepareTaskResult:
     """Recommend whether a skill helps and return compact evidence from SkillScout.
 
@@ -96,14 +122,40 @@ async def prepare_task(
         return _prepare_error(
             "invalid_input", "agent must be 1–50 letters, digits, dots, underscores, or hyphens"
         )
+    if type(context_budget_bytes) is not int or not (
+        0 <= context_budget_bytes <= MAX_EVIDENCE_PACKET_BYTES
+    ):
+        return _prepare_error(
+            "invalid_input",
+            f"context_budget_bytes must be between 0 and {MAX_EVIDENCE_PACKET_BYTES}",
+            task=task,
+        )
 
     try:
         project_scope = _project_scope(project_path)
+        evidence_packets: dict[str, MCPTaskEvidencePacket] = {}
+
+        def capture_evidence_packet(
+            candidate: CandidateReport,
+            detail: SkillDetail,
+            detail_task: str,
+            project: ProjectSnapshot,
+        ) -> None:
+            # Convert the exact detail just inspected into a compact packet, then release it.
+            evidence_packets[candidate.skill.id] = build_evidence_packet(
+                candidate,
+                detail,
+                detail_task,
+                project,
+                budget_bytes=context_budget_bytes,
+            )
+
         report = prepare_recommendation(
             task,
             project_scope,
             agent,
             allow_llm=False,
+            detail_observer=capture_evidence_packet,
         )
     except ProjectContextError:
         return _prepare_error(
@@ -148,7 +200,7 @@ async def prepare_task(
             "SkillScout could not complete the recommendation",
             task=task,
         )
-    return _prepare_result(report)
+    return _prepare_result(report, evidence_packets, context_budget_bytes)
 
 
 @server.tool(annotations=READ_ONLY_OPEN_WORLD)
@@ -268,8 +320,26 @@ def _project_scope(project_path: str | None) -> Path:
         raise ProjectContextError("project path is not an accessible directory") from exc
 
 
-def _prepare_result(report) -> PrepareTaskResult:
-    recommendations = [_candidate_result(candidate) for candidate in report.candidates]
+def _prepare_result(
+    report,
+    evidence_packets: dict[str, MCPTaskEvidencePacket] | None = None,
+    context_budget_bytes: int = DEFAULT_EVIDENCE_PACKET_BYTES,
+) -> PrepareTaskResult:
+    packets = evidence_packets or {}
+    recommendations = [
+        _candidate_result(
+            candidate,
+            packets.get(candidate.skill.id)
+            or build_evidence_packet(
+                candidate,
+                None,
+                report.task,
+                report.project,
+                budget_bytes=context_budget_bytes,
+            ),
+        )
+        for candidate in report.candidates
+    ]
     uncertainties = _safe_list(
         [
             *report.limitations,
@@ -303,7 +373,11 @@ def _prepare_result(report) -> PrepareTaskResult:
     )
 
 
-def _candidate_result(candidate: CandidateReport) -> MCPRecommendation:
+def _candidate_result(
+    candidate: CandidateReport,
+    evidence_packet: MCPTaskEvidencePacket,
+) -> MCPRecommendation:
+    explanation = explain_candidate(candidate)
     return MCPRecommendation(
         skill=MCPSkillIdentity(
             id=candidate.skill.id,
@@ -332,11 +406,16 @@ def _candidate_result(candidate: CandidateReport) -> MCPRecommendation:
             ],
             max_items=30,
         ),
+        evidence_status=explanation.statuses,
+        unresolved_evidence=explanation.unresolved,
+        next_steps=explanation.next_steps,
+        evidence_packet=evidence_packet,
         install_advice=_install_advice(candidate.proposed_install_command),
     )
 
 
 def _inspection_result(report: SkillInspectionReport) -> InspectSkillResult:
+    evidence_explanation = explain_inspection(report)
     uncertainties = _safe_list(
         [*report.limitations, *report.compatibility.unknowns, *report.evidence.evidence_notes],
         max_items=MAX_UNCERTAINTIES,
@@ -360,6 +439,9 @@ def _inspection_result(report: SkillInspectionReport) -> InspectSkillResult:
         evidence=_evidence_result(report.evidence),
         explanation="Inspection evidence is reported without assessing task relevance.",
         uncertainties=uncertainties,
+        evidence_status=evidence_explanation.statuses,
+        unresolved_evidence=evidence_explanation.unresolved,
+        next_steps=evidence_explanation.next_steps,
         next_action=_next_action(report.decision),
     )
 

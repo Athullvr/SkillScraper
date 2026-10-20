@@ -9,7 +9,7 @@ uv run skillscout recommend "Add OAuth login to a FastAPI service" --project . -
 uv run skillscout inspect vercel-labs/skills/find-skills --format json
 ```
 
-The command sends the task query to the skills.sh search API, then requests details for no more than the configured candidate limit. It may return 401/403 if the API requires credentials; set `SKILLSCOUT_CATALOG_TOKEN` or `VERCEL_OIDC_TOKEN` and retry. Audit access can be unavailable even when search and details work; this remains unknown evidence and does not break search.
+The command sends the task query to the skills.sh search API, then requests details for no more than the configured candidate limit. The [skills.sh API reference](https://www.skills.sh/docs/api) documents bearer authentication for API calls and explicitly says audit requests require authentication; it does not document an unauthenticated search or detail path. Its documented credential is a Vercel OIDC token. Enable OIDC Federation for a linked Vercel project, run `vercel link` and `vercel env pull`, then make `VERCEL_OIDC_TOKEN` available in the environment that starts SkillScout. `vercel env pull` writes `.env.local`, which SkillScout does not read automatically. Refresh the token and restart SkillScout after expiry. Never paste the token into task text or commit it. `SKILLSCOUT_CATALOG_TOKEN` is a bearer-token override if the endpoint accepts it, not a documented separate skills.sh API key. Audit access can be unavailable even when search and details work; this remains unknown evidence and does not break search.
 
 Review the JSON for stable IDs, source URLs, retrieval timestamps, content hashes, audit revision association, and local findings. The CLI prints proposed install commands but never runs them.
 
