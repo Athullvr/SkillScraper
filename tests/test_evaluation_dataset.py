@@ -31,7 +31,8 @@ def test_exploratory_task_dataset_is_complete_and_explicit_about_measurements():
 
 def test_preregistered_v1_dataset_has_fixed_categories_and_human_judgments():
     dataset_path = Path(__file__).parents[1] / "docs" / "evaluation" / "v1" / "tasks.jsonl"
-    tasks = [json.loads(line) for line in dataset_path.read_text(encoding="utf-8").splitlines()]
+    dataset_bytes = dataset_path.read_bytes()
+    tasks = [json.loads(line) for line in dataset_bytes.decode("utf-8").splitlines()]
     categories = [task["category"] for task in tasks]
 
     assert len(tasks) == 15
@@ -54,4 +55,6 @@ def test_preregistered_v1_dataset_has_fixed_categories_and_human_judgments():
     results_path = dataset_path.with_name("results.json")
     results = json.loads(results_path.read_text(encoding="utf-8"))
     assert results["dataset"]["task_count"] == len(tasks)
-    assert results["dataset"]["sha256"] == hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    dataset_sha256 = hashlib.sha256(dataset_bytes).hexdigest()
+    assert dataset_sha256 == "6bcdd11f33f55193edd3808d02075a22dfa47f86333d099e8432e448010c3649"
+    assert results["dataset"]["sha256"] == dataset_sha256
