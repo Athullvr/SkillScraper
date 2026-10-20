@@ -1,6 +1,58 @@
 # Verification snapshots
 
+## SkillScout v3 MCP stdio connectivity
+
+**Checked:** 2026-10-20. No server or CLI code change was needed. The README's installed launch command (`skillscout mcp`) and local stdio transport worked as documented once tested outside the nested-process sandbox.
+
+### Environment and previous timeout
+
+The lockfile and repository environment both resolve MCP SDK `2.3.0`; the active interpreter was `/home/athulvr/Documents/My Projects/SkillScraper/.venv/bin/python` (Python 3.12.3, resolving to `/usr/bin/python3`) with AnyIO `4.15.1`. Pytest's configured `pythonpath = ["src"]` imported SkillScout from `src/skillscout`. The existing `test_stdio_process_starts_without_non_protocol_startup_output` launches `[sys.executable, "-m", "skillscout", "mcp"]` from the repository root and checks that it stays alive with empty startup stdout/stderr. That test does not perform MCP initialization.
+
+Inside the sandbox, the SDK `Client`/`stdio_client` handshake timed out for both the installed SkillScout command and an isolated server built with the same SDK, in both auto and legacy modes. A raw JSON-RPC initialize request also received no stdout response; those diagnostic processes were terminated after the timeout (`-15`). The same sandboxed nested-process behavior affected a child running the trivial `anyio.to_thread.run_sync(lambda: 123)` probe, while the top-level AnyIO probe completed. The first diagnostic attempt used `io.StringIO` for the SDK's stderr sink and failed immediately because the SDK requires a file descriptor; replacing it with a file-backed sink reproduced the timeout. Together with the successful unsandboxed handshakes below, this points to the sandbox's nested-process/AnyIO worker behavior rather than a SkillScout protocol defect. No timeout increase or server workaround was applied.
+
+### Clean wheel install and SDK client
+
+The wheel was built, then a fresh environment was synchronized from the checked-in lockfile and overlaid with the built wheel:
+
+```bash
+UV_CACHE_DIR=/tmp/skillscout-v3-uv-cache uv build --out-dir /tmp/skillscout-v3-wheel-verify
+UV_CACHE_DIR=/tmp/skillscout-v3-uv-cache UV_PROJECT_ENVIRONMENT=/tmp/skillscout-v3-clean-env-verify uv sync --all-extras --no-editable --locked
+UV_CACHE_DIR=/tmp/skillscout-v3-uv-cache uv pip install --python /tmp/skillscout-v3-clean-env-verify/bin/python --no-deps /tmp/skillscout-v3-wheel-verify/skillscout-0.1.0-py3-none-any.whl
+/tmp/skillscout-v3-clean-env-verify/bin/python /tmp/skillscout-v3-verify.py /tmp/skillscout-v3-clean-env-verify
+```
+
+The SDK-backed verification used `mcp.Client` with the supported `stdio_client` transport and a file-backed stderr capture. The isolated minimal SDK server initialized in **0.570 s** in auto mode (protocol `2026-07-28`) and **0.519 s** in legacy mode (protocol `2025-11-25`); each exposed `ping`, returned `pong`, wrote zero stderr bytes, and exited `0` on shutdown.
+
+The installed wheel loaded from `/tmp/skillscout-v3-clean-env-verify/lib/python3.12/site-packages/skillscout` with SDK `2.3.0`. The installed `skillscout mcp` command initialized in **0.728 s** in auto mode, exposed `doctor`, `inspect_skill`, and `prepare_task`, and returned a schema-valid successful `doctor` result and `NO_SKILL_NEEDED` for a routine typo task. Invalid `prepare_task` and `inspect_skill` inputs returned structured `invalid_input` errors. With `SKILLSCOUT_CATALOG_URL=https://127.0.0.1:1` (a local no-listener endpoint), catalog-backed preparation returned `status: error`, `decision: null`, `error: catalog_unavailable`; valid-ID inspection returned the same operational error. These failures were not reported as `NO_SKILL_NEEDED`. All SkillScout process runs wrote zero stderr bytes and recorded exit code `0`. Successful SDK initialization, discovery, and calls also confirmed stdout carried parseable MCP protocol messages without startup text. This used no live catalog, credentials, network listener, installation of a skill, or skill execution.
+
+### Regression and style checks
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
+Result: **107 passed, 0 failed, 0 skipped**.
+
+The full-tree checks were:
+
+```bash
+UV_CACHE_DIR=/tmp/skillscout-v3-uv-cache uv run --with ruff ruff check src tests
+UV_CACHE_DIR=/tmp/skillscout-v3-uv-cache uv run --offline --with ruff ruff format --check src tests
+```
+
+`ruff check src tests` reported **29 findings** outside the seven MCP implementation/test files checked below. The full-tree format check reported **21 files would be reformatted, 12 already formatted**. Focused lint and format checks on those seven files passed:
+
+```bash
+UV_CACHE_DIR=/tmp/skillscout-v3-uv-cache uv run --offline --with ruff ruff check src/skillscout/application.py src/skillscout/mcp_models.py src/skillscout/mcp_server.py src/skillscout/ranking.py src/skillscout/evidence_explanations.py src/skillscout/evidence_packet.py tests/test_mcp_server.py
+UV_CACHE_DIR=/tmp/skillscout-v3-uv-cache uv run --offline --with ruff ruff format --check src/skillscout/application.py src/skillscout/mcp_models.py src/skillscout/mcp_server.py src/skillscout/ranking.py src/skillscout/evidence_explanations.py src/skillscout/evidence_packet.py tests/test_mcp_server.py
+git diff --check
+```
+
+Ruff was run temporarily and was not added to project dependencies. The repository has no configured type-check command. The existing CLI regression suite ran as part of pytest; no CLI, policy, dependency, transport, or installation code was changed for this verification.
+
 ## SkillScout v2 evidence packet update
+
+This earlier v2 snapshot records the state before the stdio handshake diagnosis above.
 
 **Checked:** 2026-10-20. This snapshot covers actionable evidence explanations and task-scoped MCP excerpts.
 
