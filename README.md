@@ -73,6 +73,16 @@ For Claude Code, create a project `.mcp.json` (or use Claude Code's MCP registra
 
 This uses Claude Code's local stdio configuration format; see the [Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp). The command starts `skillscout mcp`, which speaks MCP over stdin/stdout and does not start an HTTP listener. `skillscout doctor` checks local config; `claude mcp list` can confirm the host registration.
 
+Codex CLI can use the same installed command through `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.skillscout]
+command = "skillscout"
+args = ["mcp"]
+```
+
+Registration makes the tools available but does not guarantee that the host will call them. In an observed Codex CLI run, an ordinary README typo prompt did not invoke SkillScout; a separate prompt that explicitly requested the tools did. To make skill selection consistent, add a host instruction such as: “Before choosing a specialist coding skill, call SkillScout `prepare_task` with the task and project path. Treat its result as evidence, and follow your own safety rules.” This repository's project-local [AGENTS.md](AGENTS.md) provides Codex guidance and was exercised in a paired invocation check. SkillScout does not edit agent configuration.
+
 The server exposes three read-only tools:
 
 - `prepare_task(task, project_path?, agent?, context_budget_bytes?)` runs the existing recommendation pipeline. `project_path` defaults to the server's working directory. It returns `NO_SKILL_NEEDED`, `USE`, `REVIEW`, or `AVOID` using the existing policy. Operational failures return `status: "error"` and `decision: null`, so a failed catalog request is never represented as a no-skill decision. The optional excerpt budget defaults to 1200 UTF-8 bytes, can be set to `0` to disable excerpts, and has a hard maximum of 2400 bytes.
@@ -218,7 +228,7 @@ Unknown audit status, unbound audit revisions, missing hashes, incomplete detail
 
 See [the security model](docs/security-model.md), [limitations](docs/limitations.md), [JSON schema notes](docs/json-schema.md), [an example report](docs/example-report.md), and [troubleshooting](docs/troubleshooting.md).
 
-See the [exploratory evaluation dataset and measurement protocol](docs/evaluation/README.md). Live task-fit and ordinary catalog-search baseline measurements are pending network access; the dataset is not evidence of recommendation accuracy.
+See the [20-task exploratory dataset](docs/evaluation/README.md) and the separate [15-task evaluation v1 dataset and result snapshot](docs/evaluation/v1/README.md). Catalog-backed comparisons remain pending authorized catalog access; neither dataset alone establishes recommendation accuracy.
 
 See the [current verification snapshot](docs/verification.md) for test, packaging, and network results from the latest audit.
 

@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "skillscout-evaluation-v1",
+  "checked_date": "2026-10-20",
+  "source_revision": "13e4adb5603fea3b1b9f507c02819d2027db372a",
+  "dataset": {
+    "path": "tasks.jsonl",
+    "sha256": "6bcdd11f33f55193edd3808d02075a22dfa47f86333d099e8432e448010c3649",
+    "task_count": 15,
+    "category_counts": {
+      "routine_no_skill": 5,
+      "skill_may_help": 5,
+      "weak_or_incomplete_or_suspicious": 5
+    },
+    "authored_tasks_are_actual_developer_tasks": false
+  },
+  "environment": {
+    "skillscout": "0.1.0",
+    "python": "3.12.3",
+    "httpx": "0.28.1",
+    "pydantic": "2.14.1",
+    "mcp_sdk_from_lockfile": "2.3.0",
+    "project_context": "SkillScout repository root",
+    "optional_llm": "disabled; doctor reported no key and no task-text opt-in"
+  },
+  "catalog": {
+    "configured_base": "https://skills.sh",
+    "skillscout_catalog_token_present": false,
+    "vercel_oidc_token_present": false,
+    "doctor_auth_status": "not configured",
+    "authorized_live_search": "not run; no supported credential was available",
+    "live_skill_details": "not run",
+    "live_audits": "not run",
+    "live_hash_and_revision_matching": "not run",
+    "ordinary_search_baseline": "not run",
+    "historical_live_auth_probe": {
+      "date": "2026-10-18",
+      "recorded_result": "HTTP 401 authentication_required",
+      "source": "prior docs/verification.md snapshot; not a new request in this run"
+    },
+    "routine_variable_task_cli_probe": {
+      "attempted": true,
+      "http_status_observed": null,
+      "response_payload_observed": false,
+      "cli_error_code": "catalog_error",
+      "cli_message": "catalog request failed after bounded retries",
+      "note": "The failure cause is not identified by the CLI output; this was not a valid no-skill result."
+    }
+  },
+  "routine_fast_path_probe": {
+    "command_pattern": "skillscout recommend <task> --project <repository-root> --format json",
+    "project_argument_used": "SkillScout repository root for all tasks; this was a classifier/operational smoke probe, not a project-context compatibility evaluation",
+    "repetitions_per_task": 3,
+    "correct_no_skill_task_cases": 4,
+    "total_no_skill_task_cases": 5,
+    "successful_no_skill_runs": 12,
+    "failed_or_operational_task_cases": 1,
+    "tasks": [
+      {
+        "id": "routine-typo",
+        "decisions": ["NO_SKILL_NEEDED", "NO_SKILL_NEEDED", "NO_SKILL_NEEDED"],
+        "exit_codes": [0, 0, 0],
+        "runtime_ms": [206.07, 205.92, 197.59],
+        "median_runtime_ms": 205.92
+      },
+      {
+        "id": "routine-variable",
+        "decisions": [null, null, null],
+        "exit_codes": [3, 3, 3],
+        "error_code": "catalog_error",
+        "runtime_ms": [1153.98, 1132.01, 1152.12],
+        "median_runtime_ms": 1152.12
+      },
+      {
+        "id": "routine-unused-import",
+        "decisions": ["NO_SKILL_NEEDED", "NO_SKILL_NEEDED", "NO_SKILL_NEEDED"],
+        "exit_codes": [0, 0, 0],
+        "runtime_ms": [203.49, 199.13, 200.97],
+        "median_runtime_ms": 200.97
+      },
+      {
+        "id": "routine-unit-test",
+        "decisions": ["NO_SKILL_NEEDED", "NO_SKILL_NEEDED", "NO_SKILL_NEEDED"],
+        "exit_codes": [0, 0, 0],
+        "runtime_ms": [202.87, 202.93, 198.95],
+        "median_runtime_ms": 202.87
+      },
+      {
+        "id": "routine-readme-command",
+        "decisions": ["NO_SKILL_NEEDED", "NO_SKILL_NEEDED", "NO_SKILL_NEEDED"],
+        "exit_codes": [0, 0, 0],
+        "runtime_ms": [204.98, 195.76, 200.25],
+        "median_runtime_ms": 200.25
+      }
+    ],
+    "interpretation": "Four of five expected no-skill task cases returned NO_SKILL_NEEDED on all repetitions. The local-variable rename did not match the deterministic routine classifier; its catalog attempt failed operationally and yielded no recommendation."
+  },
+  "live_comparison_metrics": {
+    "useful_skill_selection": null,
+    "unnecessary_skill_recommendations": null,
+    "relevant_skills_missed": null,
+    "review_decisions": null,
+    "avoid_decisions": null,
+    "evidence_completeness_and_provenance": null,
+    "ordinary_search_time_ms": null,
+    "skillscout_time_to_useful_decision_ms": null,
+    "status": "unmeasured; authorized catalog access unavailable"
+  },
+  "mcp_host": {
+    "host": "Codex CLI 0.162.1",
+    "registration_method": "temporary inline CLI configuration; no user or project agent configuration was written",
+    "explicit_tool_run": {
+      "exit_code": 0,
+      "elapsed_seconds": 17.694,
+      "calls": [
+        {"tool": "doctor", "result": "valid success response; no catalog credential reported"},
+        {"tool": "prepare_task", "result": "valid success response; decision NO_SKILL_NEEDED"},
+        {"tool": "inspect_skill", "result": "valid error response; code invalid_input"}
+      ],
+      "client_parsed_tool_responses": true
+    },
+    "unprompted_routine_task_run": {
+      "exit_code": 0,
+      "elapsed_seconds": 12.547,
+      "calls": [],
+      "result": "Codex answered that a README typo did not warrant a specialist skill without invoking SkillScout, despite the server-provided instructions."
+    },
+    "host_side_instruction_conclusion": "For reliable invocation before choosing a specialist skill, add explicit host instructions or explicitly request SkillScout. The server description/instructions and registration alone did not trigger a tool call in the observed routine-task run.",
+    "catalog_backed_host_call": "not tested; no catalog credentials"
+  },
+  "scope": {
+    "live_catalog_calls_succeeded": false,
+    "fixtures_used_for_live_claims": false,
+    "actual_developer_tasks_measured": false,
+    "skill_installation_or_execution": false,
+    "project_file_modification_by_host_test": false
+  }
+}

@@ -1,5 +1,7 @@
 # SkillScout task evaluation
 
+The original 20-case set below is exploratory. A separate fixed 15-task evaluation v1 set with per-task human relevance criteria and current run status is available in [`v1/README.md`](v1/README.md). The v1 dataset does not overwrite or reinterpret these earlier exploratory results.
+
 `tasks.jsonl` contains 20 human-authored cases spanning Python, JavaScript/TypeScript, Rust, Go, Ruby, PHP, Dart, Java, Swift, Terraform, Kubernetes, PostgreSQL, routine edits, unknown compatibility, missing audit evidence, and a synthetic critical-risk fixture. Expected outcomes, rationales, and candidate-topic hypotheses were recorded before the measurements below. Candidate-topic names are hypotheses only; they are not verified skills.sh IDs.
 
 ## Relevance and decision criteria

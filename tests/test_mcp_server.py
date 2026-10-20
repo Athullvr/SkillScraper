@@ -151,10 +151,27 @@ def test_server_initializes_and_discovers_only_expected_tools():
     assert budget_schema["maximum"] == 2_400
 
 
-def test_prepare_task_routine_decision_is_structured_and_does_not_contact_catalog(tmp_path):
+@pytest.mark.parametrize(
+    "task",
+    [
+        "Fix a typo in the README",
+        "Rename a local variable in a Python helper function.",
+        "Change the local variable name in a helper.",
+    ],
+)
+def test_prepare_task_routine_decision_is_structured_and_does_not_contact_catalog(
+    tmp_path, monkeypatch, task
+):
+    catalog_calls = []
+
+    def unexpected_catalog(_config):
+        catalog_calls.append(True)
+        raise AssertionError("routine task must not contact the catalog")
+
+    monkeypatch.setattr(application, "CatalogClient", unexpected_catalog)
     result = _call_tool(
         "prepare_task",
-        {"task": "Fix a typo in the README", "project_path": str(tmp_path)},
+        {"task": task, "project_path": str(tmp_path)},
     )
 
     payload = PrepareTaskResult.model_validate(result.structured_content)
@@ -162,6 +179,7 @@ def test_prepare_task_routine_decision_is_structured_and_does_not_contact_catalo
     assert payload.status == "success"
     assert payload.decision == "NO_SKILL_NEEDED"
     assert payload.recommendations == []
+    assert catalog_calls == []
     assert str(tmp_path) not in json.dumps(payload.model_dump(mode="json"))
 
 

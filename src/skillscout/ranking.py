@@ -269,6 +269,7 @@ def task_is_routine(task: str) -> bool:
     routine_patterns = (
         r"\b(?:fix|correct) (?:a |the )?(?:typo|spelling|punctuation)\b",
         r"\b(?:rename|change) (?:a |the )?(?:variable|function|class|file)\b",
+        r"\b(?:rename|change) (?:a |the )?local variable\b",
         r"\b(?:format|reformat|lint) (?:this |the |my )?(?:file|code|project)?\b",
         r"\bremove (?:an? |the )?unused import\b",
         r"\b(?:add|write) (?:a |one )?(?:simple )?(?:unit )?test\b",
