@@ -8,4 +8,8 @@
 - `USE` requires a passing revision-bound audit younger than 90 days. Many skills have no audit, no content hash, or audit results without revision association; those cases remain `REVIEW`.
 - The optional LLM can add task-fit perspective, but its language and score are model judgments. Deterministic policy and local/external security evidence remain authoritative.
 - The install command is generated text only. SkillScout does not install, activate, cache, or execute a candidate.
+- MCP is a local stdio adapter over the same recommendation and inspection workflows. It does not make a host invoke SkillScout automatically; the host must register the server, and some agents may need explicit instructions to call its tools.
+- MCP calls do not use the optional LLM adapter. Catalog-backed task search still transmits the heuristically redacted task query to skills.sh (or the configured compatible catalog); project source files are not transmitted. Catalog credentials are used for catalog authentication and are not exposed in tool results.
+- MCP results intentionally omit the absolute project path and bound evidence lists for compactness. Truncation counts are included where audit, local finding, or inspected file lists are capped.
+- The MCP stdio path rejects symlink components in the selected project path and the project scanner skips symlinked metadata files. Filesystem race conditions are not eliminated by this application-level path validation.
 

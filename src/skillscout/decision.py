@@ -63,17 +63,29 @@ def make_inspection_evidence(
     notes = list(audit_notes)
     evidence_status = "complete" if scan_complete else "incomplete"
     if inspection_hash is None:
-        notes.append("Detail response did not provide a content hash; inspection cannot be bound to an immutable revision.")
+        notes.append(
+            "Detail response did not provide a content hash; inspection cannot be bound to an immutable revision."
+        )
         if catalog_hash:
-            notes.append("A listing hash was supplied, but it was not used to bind a separate detail response.")
+            notes.append(
+                "A listing hash was supplied, but it was not used to bind a separate detail response."
+            )
     if not scan_complete:
-        notes.append("The retrieved file set was missing, oversized, or did not include SKILL.md; inspection is incomplete.")
+        notes.append(
+            "The retrieved file set was missing, oversized, or did not include SKILL.md; inspection is incomplete."
+        )
 
     audit_status = audit_availability
     if audit_availability == "available":
-        if not inspection_hash or not audits or not all(item.revision == inspection_hash for item in audits):
+        if (
+            not inspection_hash
+            or not audits
+            or not all(item.revision == inspection_hash for item in audits)
+        ):
             audit_status = "unbound"
-            notes.append("External audit findings were not associated with the exact inspected content hash.")
+            notes.append(
+                "External audit findings were not associated with the exact inspected content hash."
+            )
         elif any(item.audited_at is None for item in audits):
             audit_status = "unbound"
             notes.append("At least one external audit omitted its timestamp; freshness is unknown.")
@@ -86,9 +98,15 @@ def make_inspection_evidence(
             notes.append(
                 "At least one external audit timestamp lacks a timezone or is implausibly far in the future."
             )
-        elif any(_audit_freshness(item.audited_at) == "stale" for item in audits if item.audited_at is not None):
+        elif any(
+            _audit_freshness(item.audited_at) == "stale"
+            for item in audits
+            if item.audited_at is not None
+        ):
             audit_status = "stale"
-            notes.append("At least one revision-bound external audit is older than the 90-day freshness window.")
+            notes.append(
+                "At least one revision-bound external audit is older than the 90-day freshness window."
+            )
         else:
             audit_status = "current"
 
@@ -116,10 +134,10 @@ def decide_candidate(
         "USE is a recommendation based on the listed evidence, not a guarantee of safety.",
     ]
 
-    critical_local = [item for item in evidence.local_findings if item.severity == Severity.CRITICAL]
-    current_audits = (
-        evidence.external_audits if evidence.external_audit_status == "current" else []
-    )
+    critical_local = [
+        item for item in evidence.local_findings if item.severity == Severity.CRITICAL
+    ]
+    current_audits = evidence.external_audits if evidence.external_audit_status == "current" else []
     critical_audit = [
         item
         for item in current_audits
@@ -142,7 +160,10 @@ def decide_candidate(
     checks = (
         (evidence.evidence_status == "complete", "The complete retrieved file set was inspected."),
         (evidence.content_hash is not None, "The inspection is bound to a catalog content hash."),
-        (evidence.external_audit_status == "current", "External audit results are associated with this exact revision."),
+        (
+            evidence.external_audit_status == "current",
+            "External audit results are associated with this exact revision.",
+        ),
         (
             bool(current_audits)
             and all(item.status.strip().lower() == "pass" for item in current_audits),
@@ -156,12 +177,21 @@ def decide_candidate(
             ),
             "No current external audit reports a warning or medium risk level.",
         ),
-        (compatibility.status == "compatible", "Project compatibility is supported by detected metadata."),
         (
-            not any(item.severity in {Severity.MEDIUM, Severity.HIGH} for item in evidence.local_findings),
+            compatibility.status == "compatible",
+            "Project compatibility is supported by detected metadata.",
+        ),
+        (
+            not any(
+                item.severity in {Severity.MEDIUM, Severity.HIGH}
+                for item in evidence.local_findings
+            ),
             "No medium or high local heuristic findings require review.",
         ),
-        (relevance_score >= relevance_threshold(), "Task relevance exceeds the initial recommendation threshold."),
+        (
+            relevance_score >= relevance_threshold(),
+            "Task relevance exceeds the initial recommendation threshold.",
+        ),
     )
     for passed, explanation in checks:
         if passed:
@@ -172,20 +202,32 @@ def decide_candidate(
     if all(passed for passed, _ in checks):
         return Decision.USE, reasons, limitations
     if evidence.evidence_status != "complete":
-        limitations.append("The candidate was not fully inspected, so it cannot be treated as passed.")
+        limitations.append(
+            "The candidate was not fully inspected, so it cannot be treated as passed."
+        )
     if evidence.content_hash is None:
         limitations.append("The inspected files have no verified revision identity.")
     if evidence.external_audit_status in {"unavailable", "none"}:
         limitations.append("External audit status is unknown because no result was available.")
     elif evidence.external_audit_status == "unbound":
-        limitations.append("External audit results are present but their revision association is unknown or stale.")
+        limitations.append(
+            "External audit results are present but their revision association is unknown or stale."
+        )
     elif evidence.external_audit_status == "stale":
-        limitations.append("External audit results are revision-bound but older than the 90-day freshness window.")
+        limitations.append(
+            "External audit results are revision-bound but older than the 90-day freshness window."
+        )
     if compatibility.status in {"unknown", "partial"}:
         limitations.append("Project compatibility remains partly unknown.")
     if compatibility.status == "incompatible":
-        limitations.append("Detected project metadata conflicts with the skill's stated target framework.")
-    warnings = [item for item in evidence.local_findings if item.severity in {Severity.MEDIUM, Severity.HIGH}]
+        limitations.append(
+            "Detected project metadata conflicts with the skill's stated target framework."
+        )
+    warnings = [
+        item
+        for item in evidence.local_findings
+        if item.severity in {Severity.MEDIUM, Severity.HIGH}
+    ]
     if warnings:
         limitations.append("One or more local heuristic warnings need human review.")
     return Decision.REVIEW, reasons, limitations
@@ -204,7 +246,9 @@ def build_candidate_report(
     decision, reasons, limitations = decide_candidate(evidence, compatibility, relevance_score)
     command = proposed_install_command(skill, agent)
     if not command.startswith("Unavailable:"):
-        limitations.append("The proposed install command is inert report text; SkillScout never executes it.")
+        limitations.append(
+            "The proposed install command is inert report text; SkillScout never executes it."
+        )
     return CandidateReport(
         skill=skill,
         rank=rank,
@@ -244,7 +288,9 @@ def make_inspection_report(
     decision = Decision.AVOID if hard_block else Decision.REVIEW
     reasons = [
         "Inspection reports evidence only; task relevance has not been assessed.",
-        "A hard block was found in current evidence." if hard_block else "No current hard block was established by this inspection.",
+        "A hard block was found in current evidence."
+        if hard_block
+        else "No current hard block was established by this inspection.",
     ]
     limitations = [
         "This inspection is not a recommendation to use the skill for a particular task.",
@@ -279,7 +325,41 @@ def report_for_candidates(
             limitations=limitations,
         )
     best = max(candidates, key=lambda candidate: candidate.relevance_score)
+    if best.decision == Decision.AVOID:
+        return Report(
+            task=task,
+            agent=agent,
+            project=project,
+            decision=Decision.AVOID,
+            summary=(
+                f"A hard security block applies to the strongest inspected candidate: "
+                f"{best.skill.name}."
+            ),
+            candidates=candidates,
+            limitations=limitations or [],
+        )
     if best.relevance_score < relevance_threshold():
+        incomplete = [
+            candidate
+            for candidate in candidates
+            if candidate.evidence.evidence_status != "complete"
+        ]
+        if incomplete:
+            return Report(
+                task=task,
+                agent=agent,
+                project=project,
+                decision=Decision.REVIEW,
+                summary=(
+                    "No inspected candidate met the initial relevance threshold, and at least one "
+                    "candidate inspection was incomplete."
+                ),
+                candidates=candidates,
+                limitations=[
+                    *(limitations or []),
+                    "Incomplete candidate inspection prevents a definitive no-skill decision.",
+                ],
+            )
         return Report(
             task=task,
             agent=agent,
@@ -294,8 +374,6 @@ def report_for_candidates(
         )
     decision = best.decision
     summary = f"Best task-fit candidate: {best.skill.name} ({decision.value})."
-    if decision == Decision.AVOID:
-        summary += " A hard security block applies to the inspected revision."
     return Report(
         task=task,
         agent=agent,
@@ -332,4 +410,3 @@ def _audit_freshness(audited_at: datetime) -> str:
     if age > MAX_AUDIT_AGE:
         return "stale"
     return "current"
-

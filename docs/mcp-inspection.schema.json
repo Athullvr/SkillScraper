@@ -1,0 +1,420 @@
+{
+  "$defs": {
+    "Compatibility": {
+      "properties": {
+        "status": {
+          "enum": [
+            "compatible",
+            "partial",
+            "unknown",
+            "incompatible"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "detected_facts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Detected Facts",
+          "type": "array"
+        },
+        "inferred_facts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inferred Facts",
+          "type": "array"
+        },
+        "unknowns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unknowns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "Compatibility",
+      "type": "object"
+    },
+    "Decision": {
+      "enum": [
+        "NO_SKILL_NEEDED",
+        "USE",
+        "REVIEW",
+        "AVOID"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "MCPAuditEvidence": {
+      "properties": {
+        "provider": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "status": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Status",
+          "type": "string"
+        },
+        "risk_level": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Risk Level"
+        },
+        "audited_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audited At"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        }
+      },
+      "required": [
+        "provider",
+        "status"
+      ],
+      "title": "MCPAuditEvidence",
+      "type": "object"
+    },
+    "MCPInspectionEvidence": {
+      "properties": {
+        "content_hash": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Hash"
+        },
+        "evidence_status": {
+          "enum": [
+            "complete",
+            "incomplete",
+            "unknown"
+          ],
+          "title": "Evidence Status",
+          "type": "string"
+        },
+        "external_audit_status": {
+          "enum": [
+            "current",
+            "stale",
+            "unbound",
+            "unavailable",
+            "none"
+          ],
+          "title": "External Audit Status",
+          "type": "string"
+        },
+        "external_audits": {
+          "items": {
+            "$ref": "#/$defs/MCPAuditEvidence"
+          },
+          "title": "External Audits",
+          "type": "array"
+        },
+        "external_audit_count": {
+          "minimum": 0,
+          "title": "External Audit Count",
+          "type": "integer"
+        },
+        "external_audits_truncated": {
+          "default": false,
+          "title": "External Audits Truncated",
+          "type": "boolean"
+        },
+        "local_findings": {
+          "items": {
+            "$ref": "#/$defs/MCPLocalFinding"
+          },
+          "title": "Local Findings",
+          "type": "array"
+        },
+        "local_finding_count": {
+          "minimum": 0,
+          "title": "Local Finding Count",
+          "type": "integer"
+        },
+        "local_findings_truncated": {
+          "default": false,
+          "title": "Local Findings Truncated",
+          "type": "boolean"
+        },
+        "files_inspected": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files Inspected",
+          "type": "array"
+        },
+        "files_inspected_count": {
+          "minimum": 0,
+          "title": "Files Inspected Count",
+          "type": "integer"
+        },
+        "files_inspected_truncated": {
+          "default": false,
+          "title": "Files Inspected Truncated",
+          "type": "boolean"
+        },
+        "evidence_notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "evidence_status",
+        "external_audit_status",
+        "external_audit_count",
+        "local_finding_count",
+        "files_inspected_count"
+      ],
+      "title": "MCPInspectionEvidence",
+      "type": "object"
+    },
+    "MCPLocalFinding": {
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "summary": {
+          "maxLength": 500,
+          "title": "Summary",
+          "type": "string"
+        },
+        "file_path": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File Path"
+        }
+      },
+      "required": [
+        "check_id",
+        "severity",
+        "summary"
+      ],
+      "title": "MCPLocalFinding",
+      "type": "object"
+    },
+    "MCPSkillIdentity": {
+      "properties": {
+        "id": {
+          "maxLength": 500,
+          "minLength": 3,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "slug": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "source",
+        "slug"
+      ],
+      "title": "MCPSkillIdentity",
+      "type": "object"
+    },
+    "MCPToolError": {
+      "properties": {
+        "code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "MCPToolError",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "description": "Stable MCP result shape for ``inspect_skill``.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "decision": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Decision"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "skill": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MCPSkillIdentity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "compatibility": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Compatibility"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MCPInspectionEvidence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "explanation": {
+      "maxLength": 1000,
+      "title": "Explanation",
+      "type": "string"
+    },
+    "uncertainties": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Uncertainties",
+      "type": "array"
+    },
+    "next_action": {
+      "maxLength": 500,
+      "title": "Next Action",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MCPToolError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "status",
+    "explanation",
+    "next_action"
+  ],
+  "title": "InspectSkillResult",
+  "type": "object"
+}
