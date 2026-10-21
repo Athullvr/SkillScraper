@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -27,6 +28,31 @@ PROTECTED_AUDIT_TEXT = (
     "current inspected revision has no verified revision-bound external audit evidence",
     "no verified revision-bound external audit evidence",
 )
+_PROTECTED_AUDIT_PATTERNS = (
+    re.compile(
+        r"(?is)\b(?:no|without|missing|lacks?|unverified|not\s+verified|unavailable|absent)\b"
+        r".{0,120}\b(?:current\s+)?(?:inspected\s+)?revision\b.{0,120}"
+        r"\b(?:external\s+)?audit(?:\s+evidence)?\b"
+    ),
+    re.compile(
+        r"(?is)\b(?:external\s+)?audit(?:\s+evidence)?\b.{0,120}"
+        r"\b(?:no|missing|unverified|not\s+verified|unavailable|absent)\b.{0,100}"
+        r"\b(?:current\s+)?revision\b"
+    ),
+    re.compile(
+        r"(?is)\bcurrent\s+revision\b.{0,100}"
+        r"\b(?:no|not|without|missing|unverified|unavailable)\b.{0,60}"
+        r"\b(?:audit|external\s+review)\b"
+    ),
+)
+_CREDENTIAL_PATTERNS = (
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(r"(?i)\b(?:api[_-]?key|secret|access[_-]?token|password)\s*[:=]\s*\S+"),
+    re.compile(r"(?i)\bauthorization\s*[:=]\s*basic\s+[A-Za-z0-9+/=]{12,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|sk-[A-Za-z0-9]{20,})\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+)
 
 
 class FixtureError(ValueError):
@@ -47,6 +73,10 @@ def _relative_path(root: Path, path: Path) -> str:
         or "\r" in rel
     ):
         raise FixtureError(f"unsafe fixture path: {rel!r}")
+    try:
+        rel.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise FixtureError(f"fixture path is not valid UTF-8: {rel!r}") from exc
     return rel
 
 
@@ -171,9 +201,29 @@ def _check_protected_text(root: Path) -> None:
             content = path.read_text(encoding="utf-8").casefold()
         except UnicodeDecodeError:
             continue
-        normalized = " ".join(content.split())
-        if any(protected in normalized for protected in PROTECTED_AUDIT_TEXT):
+        if has_protected_audit_disclosure(content):
             raise FixtureError(f"protected evaluator-only audit text found in fixture: {path.name}")
+        if has_credential_like_text(content):
+            raise FixtureError(f"credential-like text found in fixture: {path.name}")
+
+
+def has_protected_audit_disclosure(text: str) -> bool:
+    normalized = " ".join(text.casefold().split())
+    return any(protected in normalized for protected in PROTECTED_AUDIT_TEXT) or any(
+        pattern.search(text) for pattern in _PROTECTED_AUDIT_PATTERNS
+    )
+
+
+def has_credential_like_text(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _CREDENTIAL_PATTERNS)
+
+
+def redact_credential_like_text(text: str) -> str:
+    """Remove common credential forms before untrusted evidence is persisted or reviewed."""
+    result = text
+    for pattern in _CREDENTIAL_PATTERNS:
+        result = pattern.sub("[credential redacted]", result)
+    return result
 
 
 def verify_fixture_pack(
@@ -199,6 +249,15 @@ def verify_fixture_pack(
         raise FixtureError("fixture lock task IDs/order do not match the eligible dataset")
     if len(entries) != ELIGIBLE_TASK_COUNT:
         raise FixtureError(f"fixture lock must contain exactly {ELIGIBLE_TASK_COUNT} contexts")
+    actual_ids = sorted(
+        path.name for path in root.iterdir()
+        if path.is_dir() and not path.is_symlink()
+    )
+    if actual_ids != sorted(expected_ids):
+        raise FixtureError("context directories do not match the 14 eligible task IDs exactly")
+    commit = lock.get("git_commit")
+    if commit is not None and not re.fullmatch(r"[0-9a-f]{40,64}", str(commit)):
+        raise FixtureError("fixture lock Git commit must be null or a full lowercase object ID")
 
     verified: list[dict[str, object]] = []
     for task, entry in zip(tasks, entries, strict=True):
@@ -211,13 +270,18 @@ def verify_fixture_pack(
         status = entry.get("context_status")
         if status not in {"ready", "incomplete_by_protocol"}:
             raise FixtureError(f"invalid context status for {task.task_id}")
+        blocked_facts = entry.get("blocked_facts", [])
+        if not isinstance(blocked_facts, list) or not all(isinstance(item, str) for item in blocked_facts):
+            raise FixtureError(f"invalid blocked_facts for {task.task_id}")
+        if (status == "ready") != (len(blocked_facts) == 0):
+            raise FixtureError(f"context status and blocked_facts disagree for {task.task_id}")
         verified.append(
             {
                 "task_id": task.task_id,
                 "eligible_index": task.eligible_index,
                 "manifest_sha256": digest,
                 "context_status": status,
-                "blocked_facts": entry.get("blocked_facts", []),
+                "blocked_facts": blocked_facts,
             }
         )
     return {

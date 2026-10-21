@@ -186,6 +186,7 @@ class ArmRecord:
     decision: Decision | None = None
     primary_response_valid: bool = False
     late_primary_response: bool = False
+    supplemental_late_response: dict[str, Any] | None = None
     internal_attempt_count: int | None = None
     returned_metadata: dict[str, str] = field(default_factory=dict)
     slots: list[CandidateSlot] = field(default_factory=list)

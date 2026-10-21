@@ -18,6 +18,7 @@ from skillscout.evaluation.protocol import (
     SLOTS_PER_ARM,
     EvaluationTask,
     build_schedule,
+    load_dataset,
 )
 
 
@@ -39,12 +40,10 @@ def _num(value: Any) -> bool:
 
 
 def _review_stop_required(arm: Any) -> bool:
-    category = str(_get(arm, "error_category") or "")
-    harness = str(_get(arm, "harness_outcome") or "")
     termination = _value(_get(arm, "underlying_termination"))
     return (
         _value(_get(arm, "status")) == ArmStatus.FAILED.value
-        and (category == "invocation_timeout" or harness == "harness_failure" or category.startswith("harness_failure"))
+        and _get(arm, "invocation_start_monotonic_s") is not None
         and termination in {TerminationStatus.NOT_CONFIRMED.value, TerminationStatus.UNKNOWN.value}
     )
 
@@ -55,10 +54,28 @@ def validate_records(
     *,
     dataset_sha256: str = DATASET_SHA256,
 ) -> list[str]:
+    """Validate untrusted run records and return findings instead of raising on bad shapes."""
+    try:
+        return _validate_records_unchecked(pairs, tasks, dataset_sha256=dataset_sha256)
+    except (AttributeError, KeyError, OverflowError, TypeError, ValueError) as exc:
+        return [f"malformed run record structure: {type(exc).__name__}"]
+
+
+def _validate_records_unchecked(
+    pairs: Sequence[Any],
+    tasks: Sequence[EvaluationTask],
+    *,
+    dataset_sha256: str,
+) -> list[str]:
     """Return all validation errors; an empty list means structurally valid data."""
     errors: list[str] = []
     if dataset_sha256 != DATASET_SHA256:
         errors.append("dataset hash does not equal the approved v1 hash")
+    canonical_tasks = load_dataset().eligible_tasks
+    if [(task.task_id, task.task_text, task.eligible_index) for task in tasks] != [
+        (task.task_id, task.task_text, task.eligible_index) for task in canonical_tasks
+    ]:
+        errors.append("provided task records do not match the fixed eligible dataset in order")
     if len(pairs) != PLANNED_PAIR_COUNT:
         errors.append(f"expected {PLANNED_PAIR_COUNT} planned pair records, found {len(pairs)}")
         return errors
@@ -131,8 +148,18 @@ def validate_records(
                     errors.append(f"{arm_label}: primary response is not within the 240-second cap")
             elif _get(arm, "decision") is not None:
                 errors.append(f"{arm_label}: decision is fabricated without a valid primary response")
+            if _get(arm, "late_primary_response", False):
+                if status != ArmStatus.FAILED.value or _get(arm, "primary_response_valid", False):
+                    errors.append(f"{arm_label}: late primary response cannot revise failed primary status")
+                if _get(arm, "supplemental_late_response") is None:
+                    errors.append(f"{arm_label}: late response must be recorded as supplemental metadata")
+            elif _get(arm, "supplemental_late_response") is not None:
+                errors.append(f"{arm_label}: supplemental response is present without a late-response flag")
             if arm_name is ArmName.ORDINARY_SEARCH and _get(arm, "decision") is not None:
                 errors.append(f"{arm_label}: ordinary-search decision must be null")
+            decision = _value(_get(arm, "decision"))
+            if decision is not None and decision not in {"NO_SKILL_NEEDED", "USE", "REVIEW", "AVOID"}:
+                errors.append(f"{arm_label}: decision is outside the approved nullable enum")
             attempts = _get(arm, "internal_attempt_count")
             if attempts is not None:
                 if not isinstance(attempts, int) or attempts < 1:
@@ -147,6 +174,13 @@ def validate_records(
                 errors.append(f"{arm_label}: must record exactly slots 1, 2, and 3")
                 continue
             slot_statuses = [_value(_get(slot, "status")) for slot in slots]
+            for slot in slots:
+                if (
+                    _value(_get(slot, "status")) == SlotStatus.OCCUPIED.value
+                    and _get(arm, "primary_response_valid", False)
+                    and not _get(slot, "opaque_candidate_key")
+                ):
+                    errors.append(f"{arm_label}/slot{_get(slot, 'position')}: occupied candidate lacks an opaque review key")
             if status == ArmStatus.COMPLETE.value and any(x not in {SlotStatus.OCCUPIED.value, SlotStatus.EMPTY.value} for x in slot_statuses):
                 errors.append(f"{arm_label}: complete response has a non-occupied/non-empty slot")
             if status == ArmStatus.PARTIAL.value and _get(arm, "primary_response_valid", False):
@@ -190,6 +224,59 @@ def validate_records(
                         if lookup_end <= deadline and _get(lookup, "late", False):
                             errors.append(f"{arm_label}/slot{_get(slot, 'position')}/{key}: response marked late before deadline")
         invoked = [name for name in ArmName if starts[name] is not None]
+        lookup_start_order: list[float] = []
+        lookup_requires_stop = False
+        ordered_lookups: list[Any] = []
+        for arm_name in expected.arm_order:
+            arm = arms[arm_name]
+            for slot in _get(arm, "slots", ()):
+                for lookup_kind in ("detail", "audit"):
+                    lookup = _get(slot, lookup_kind)
+                    if lookup is None:
+                        continue
+                    ordered_lookups.append(lookup)
+                    if _value(_get(lookup, "kind")) != lookup_kind:
+                        errors.append(f"{label}: lookup kind does not match its slot field")
+                    status_value = _value(_get(lookup, "status"))
+                    attempts = _get(lookup, "attempt_count", 0)
+                    if status_value == "available" and attempts != 1:
+                        errors.append(f"{label}: available lookup requires exactly one attempt")
+                    if status_value == "failed":
+                        start_time = _get(lookup, "start_monotonic_s")
+                        unavailable = _get(lookup, "error_category") == "lookup_handler_unavailable"
+                        expected_attempts = 0 if unavailable and start_time is None else 1
+                        if attempts != expected_attempts:
+                            errors.append(f"{label}: failed lookup has inconsistent attempt count")
+                    if status_value in {"not_started_after_deadline", "not_started_after_review_stop", "not_applicable"} and attempts != 0:
+                        errors.append(f"{label}: unstarted lookup must record zero attempts")
+                    lookup_start = _get(lookup, "start_monotonic_s")
+                    lookup_end = _get(lookup, "end_monotonic_s")
+                    if lookup_start is not None:
+                        lookup_start_order.append(float(lookup_start))
+                    if (
+                        status_value == "failed"
+                        and _get(lookup, "start_monotonic_s") is not None
+                        and _value(_get(lookup, "termination_status"))
+                        in {TerminationStatus.NOT_CONFIRMED.value, TerminationStatus.UNKNOWN.value}
+                    ):
+                        lookup_requires_stop = True
+        if lookup_start_order != sorted(lookup_start_order):
+            errors.append(f"{label}: detail/audit lookups violate the assigned arm/rank ordering")
+        if lookup_requires_stop:
+            stop_index = next(
+                index for index, lookup in enumerate(ordered_lookups)
+                if _value(_get(lookup, "status")) == "failed"
+                and _get(lookup, "start_monotonic_s") is not None
+                and _value(_get(lookup, "termination_status"))
+                in {TerminationStatus.NOT_CONFIRMED.value, TerminationStatus.UNKNOWN.value}
+            )
+            if any(
+                _get(lookup, "start_monotonic_s") is not None
+                for lookup in ordered_lookups[stop_index + 1 :]
+            ):
+                errors.append(f"{label}: lookup began after an unconfirmed lookup timeout")
+            if not _get(pair, "run_stop_required", False):
+                errors.append(f"{label}: unconfirmed lookup timeout must stop the run pending review")
         if len(invoked) < 2:
             for arm in arms.values():
                 for slot in _get(arm, "slots", ()):

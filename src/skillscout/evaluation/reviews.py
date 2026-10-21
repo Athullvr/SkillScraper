@@ -11,16 +11,23 @@ import json
 import os
 import random
 import re
+import stat
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
-from skillscout.evaluation.fixtures import PROTECTED_AUDIT_TEXT
-from skillscout.evaluation.models import Decision, DecisionConformity, RelevanceLabel, ReviewResolution
-from skillscout.evaluation.protocol import EvaluationTask, criteria_for_candidate_review
+from skillscout.evaluation.fixtures import has_protected_audit_disclosure, redact_credential_like_text
+from skillscout.evaluation.models import (
+    ArmStatus,
+    Decision,
+    DecisionConformity,
+    RelevanceLabel,
+    ReviewResolution,
+)
+from skillscout.evaluation.protocol import ArmName, EvaluationTask, criteria_for_candidate_review
 
 
 class ReviewError(ValueError):
@@ -73,12 +80,14 @@ class ReviewerPacket:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class ReviewOrder:
+    seed: int
+    packet_keys: tuple[str, ...]
+    packets: tuple[ReviewerPacket, ...]
+
+
 _URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
-_PROTECTED_EQUIVALENT = re.compile(
-    r"(?is)(?:no|without|missing|lacks?|unverified|not\s+verified).{0,100}"
-    r"(?:revision[- ]bound|revision[- ]specific|current\s+revision).{0,100}"
-    r"(?:external\s+)?audit\s+evidence"
-)
 _FORBIDDEN_KEYS = {
     "arm", "arm_name", "system", "system_identity", "decision", "original_decision",
     "expected_decision", "expected_label", "category", "task_category", "rank",
@@ -92,18 +101,13 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _normalize(text: str) -> str:
-    return " ".join(text.casefold().split())
-
-
 def _assert_no_protected_disclosure(text: str) -> None:
-    normalized = _normalize(text)
-    if any(fragment in normalized for fragment in PROTECTED_AUDIT_TEXT) or _PROTECTED_EQUIVALENT.search(text):
+    if has_protected_audit_disclosure(text):
         raise ReviewError("protected audit-state disclosure is not allowed in reviewer packets")
 
 
 def _mask_identifiers(text: str, identifiers: Iterable[str]) -> str:
-    result = text
+    result = redact_credential_like_text(text)
     for identifier in sorted({value for value in identifiers if value}, key=len, reverse=True):
         result = re.sub(re.escape(identifier), "[candidate identifier masked]", result, flags=re.IGNORECASE)
     result = _URL.sub("[source URL masked]", result)
@@ -120,7 +124,8 @@ def _allowed_evidence(
     for item in items:
         if not isinstance(item, EvidenceExcerpt):
             raise ReviewError("evidence must use the explicit EvidenceExcerpt schema")
-        if item.evidence_type.casefold() in {"audit", "safety", "scanner", "protected_finding"}:
+        evidence_type = item.evidence_type.casefold()
+        if any(marker in evidence_type for marker in ("audit", "safety", "scanner", "protected")):
             continue
         if item.provenance not in {"decision_time_arm_evidence", "retrospective_evaluator_evidence", "task_context"}:
             raise ReviewError(f"unsupported evidence provenance: {item.provenance}")
@@ -163,12 +168,15 @@ def build_candidate_relevance_packet(
     identifiers_to_mask: Iterable[str] = (),
 ) -> ReviewerPacket:
     """Build a candidate-only packet with criteria but no evaluator labels."""
+    packet_key = (packet_key_factory or (lambda: str(uuid.uuid4())))()
+    if not isinstance(packet_key, str) or not packet_key.strip() or task.task_id.casefold() in packet_key.casefold():
+        raise ReviewError("review packet key must be non-empty and must not disclose the task ID")
     packet = ReviewerPacket(
-        packet_key=(packet_key_factory or (lambda: str(uuid.uuid4())))(),
+        packet_key=packet_key,
         kind=ReviewKind.CANDIDATE_RELEVANCE,
-        task_text=task.task_text,
+        task_text=_mask_identifiers(task.task_text, (*identifiers_to_mask, task.task_id)),
         criteria=criteria_for_candidate_review(task),
-        approved_context=_mask_identifiers(approved_context, identifiers_to_mask),
+        approved_context=_mask_identifiers(approved_context, (*identifiers_to_mask, task.task_id)),
         evidence=_allowed_evidence(evidence, identifiers_to_mask=identifiers_to_mask),
     )
     _verify_packet_boundary(packet)
@@ -184,12 +192,15 @@ def build_decision_conformity_packet(
     identifiers_to_mask: Iterable[str] = (),
 ) -> ReviewerPacket:
     """Build a task/action assessment packet without the original action or labels."""
+    packet_key = (packet_key_factory or (lambda: str(uuid.uuid4())))()
+    if not isinstance(packet_key, str) or not packet_key.strip() or task.task_id.casefold() in packet_key.casefold():
+        raise ReviewError("review packet key must be non-empty and must not disclose the task ID")
     packet = ReviewerPacket(
-        packet_key=(packet_key_factory or (lambda: str(uuid.uuid4())))(),
+        packet_key=packet_key,
         kind=ReviewKind.DECISION_CONFORMITY,
-        task_text=task.task_text,
+        task_text=_mask_identifiers(task.task_text, (*identifiers_to_mask, task.task_id)),
         criteria=(),
-        approved_context=_mask_identifiers(approved_context, identifiers_to_mask),
+        approved_context=_mask_identifiers(approved_context, (*identifiers_to_mask, task.task_id)),
         evidence=_allowed_evidence(evidence, identifiers_to_mask=identifiers_to_mask),
         decision_options=tuple(decision.value for decision in Decision),
     )
@@ -199,9 +210,16 @@ def build_decision_conformity_packet(
 
 def shuffle_packets(packets: Iterable[ReviewerPacket], *, seed: int) -> tuple[ReviewerPacket, ...]:
     """Return a reproducible, recorded-seed review order without exposing the crosswalk."""
-    result = list(packets)
-    random.Random(seed).shuffle(result)
-    return tuple(result)
+    return prepare_review_order(packets, seed=seed).packets
+
+
+def prepare_review_order(packets: Iterable[ReviewerPacket], *, seed: int) -> ReviewOrder:
+    values = list(packets)
+    keys = [packet.packet_key for packet in values]
+    if len(set(keys)) != len(keys):
+        raise ReviewError("review packet keys must be unique within a shuffled review batch")
+    random.Random(seed).shuffle(values)
+    return ReviewOrder(seed=seed, packet_keys=tuple(item.packet_key for item in values), packets=tuple(values))
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +259,119 @@ class ReviewLedger:
     def events(self) -> tuple[ReviewEvent, ...]:
         return tuple(self._events)
 
+    @classmethod
+    def from_records(cls, records: Iterable[ReviewEvent | Mapping[str, Any]]) -> ReviewLedger:
+        """Rehydrate and validate persisted append-only reviewer events."""
+        ledger = cls()
+        events: list[ReviewEvent] = []
+        for record in records:
+            if isinstance(record, ReviewEvent):
+                event = record
+            else:
+                try:
+                    event = ReviewEvent(
+                        event_id=str(record["event_id"]),
+                        packet_key=str(record["packet_key"]),
+                        kind=ReviewKind(record["kind"]),
+                        phase=ReviewPhase(record["phase"]),
+                        reviewer_pseudonym=str(record["reviewer_pseudonym"]),
+                        action=str(record["action"]),
+                        assessable=record["assessable"],
+                        rationale=str(record["rationale"]),
+                        evidence_basis=str(record["evidence_basis"]),
+                        blinding_compromised=record["blinding_compromised"],
+                        source_recognized=record["source_recognized"],
+                        unavoidable_exposure=tuple(record["unavoidable_exposure"]),
+                        timestamp_utc=str(record["timestamp_utc"]),
+                        replaces_event_id=record.get("replaces_event_id"),
+                    )
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ReviewError("persisted review event is malformed") from exc
+            events.append(event)
+        ledger._events = events
+        ledger._validate_history()
+        return ledger
+
+    def _validate_history(self) -> None:
+        event_ids: set[str] = set()
+        for index, event in enumerate(self._events):
+            if not event.event_id or event.event_id in event_ids or not event.packet_key:
+                raise ReviewError("review event IDs and packet keys must be unique and non-empty")
+            event_ids.add(event.event_id)
+            if not isinstance(event.assessable, bool) or not isinstance(event.blinding_compromised, bool):
+                raise ReviewError("review assessability and blinding fields must be booleans")
+            if not isinstance(event.source_recognized, bool) or not event.reviewer_pseudonym.strip():
+                raise ReviewError("review recognition and reviewer fields are malformed")
+            if not event.rationale.strip() or event.evidence_basis not in {"decision_time", "retrospective", "mixed", "insufficient"}:
+                raise ReviewError("review rationale or evidence provenance is malformed")
+            _assert_no_protected_disclosure(event.rationale)
+            if any(not isinstance(value, str) for value in event.unavoidable_exposure):
+                raise ReviewError("reviewer exposure entries must be text")
+            for value in event.unavoidable_exposure:
+                _assert_no_protected_disclosure(value)
+            try:
+                timestamp = datetime.fromisoformat(event.timestamp_utc.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ReviewError("review event timestamp is not valid ISO-8601") from exc
+            if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise ReviewError("review event timestamp must include a UTC offset")
+            earlier = self._events[:index]
+            same_packet = [item for item in earlier if item.packet_key == event.packet_key]
+            if any(item.kind is not event.kind for item in same_packet):
+                raise ReviewError("a packet key cannot mix candidate and decision review kinds")
+            if not _valid_action(event.kind, event.action, event.assessable, event.phase):
+                raise ReviewError("persisted review event has an invalid action/assessability pair")
+            if event.phase in {ReviewPhase.INITIAL, ReviewPhase.REPLACEMENT, ReviewPhase.ADJUDICATOR_INITIAL}:
+                if any(item.reviewer_pseudonym == event.reviewer_pseudonym for item in same_packet):
+                    raise ReviewError("persisted independent assessments reuse a reviewer")
+            if event.phase is ReviewPhase.INITIAL:
+                if sum(item.phase is ReviewPhase.INITIAL for item in same_packet) >= 2 or any(
+                    item.phase in {ReviewPhase.ADJUDICATOR_INITIAL, ReviewPhase.ADJUDICATION}
+                    for item in same_packet
+                ):
+                    raise ReviewError("persisted initial review order is invalid")
+            elif event.phase is ReviewPhase.REPLACEMENT:
+                source = next((item for item in same_packet if item.event_id == event.replaces_event_id), None)
+                if (
+                    source is None
+                    or source.phase not in {ReviewPhase.INITIAL, ReviewPhase.ADJUDICATOR_INITIAL}
+                    or not source.blinding_compromised
+                    or any(item.replaces_event_id == source.event_id for item in same_packet)
+                ):
+                    raise ReviewError("persisted replacement does not repair one compromised assessment")
+                if source.phase is ReviewPhase.INITIAL and any(
+                    item.phase in {ReviewPhase.ADJUDICATOR_INITIAL, ReviewPhase.ADJUDICATION}
+                    for item in same_packet
+                ):
+                    raise ReviewError("initial review replacement occurred after adjudication began")
+                if source.phase is ReviewPhase.ADJUDICATOR_INITIAL and any(
+                    item.phase is ReviewPhase.ADJUDICATION for item in same_packet
+                ):
+                    raise ReviewError("adjudicator replacement occurred after adjudication was locked")
+            elif event.phase is ReviewPhase.ADJUDICATOR_INITIAL:
+                prior_ledger = ReviewLedger()
+                prior_ledger._events = earlier
+                initial = prior_ledger._active_initial(event.packet_key)
+                if (
+                    len(initial) != 2
+                    or initial[0].action == initial[1].action
+                    or any(item.phase is ReviewPhase.ADJUDICATOR_INITIAL for item in same_packet)
+                ):
+                    raise ReviewError("adjudicator initial assessment requires two disagreeing locked reviews")
+            else:
+                prior_ledger = ReviewLedger()
+                prior_ledger._events = earlier
+                initial = prior_ledger._active_initial(event.packet_key)
+                adjudicator = prior_ledger._active_adjudicator_initial(event.packet_key)
+                if (
+                    len(initial) != 2
+                    or initial[0].action == initial[1].action
+                    or adjudicator is None
+                    or adjudicator.reviewer_pseudonym != event.reviewer_pseudonym
+                    or any(item.phase is ReviewPhase.ADJUDICATION for item in same_packet)
+                ):
+                    raise ReviewError("persisted adjudication order or reviewer is invalid")
+
     def lock_initial(
         self,
         packet: ReviewerPacket,
@@ -268,14 +399,30 @@ class ReviewLedger:
         )
 
     def lock_adjudicator_initial(self, packet: ReviewerPacket, **kwargs: Any) -> ReviewEvent:
-        if len(self._active_initial(packet.packet_key)) != 2:
-            raise ReviewError("adjudicator must lock after both initial reviews exist")
+        initial = self._active_initial(packet.packet_key)
+        if len(initial) != 2 or initial[0].action == initial[1].action:
+            raise ReviewError("adjudicator initial review requires two disagreeing locked assessments")
         return self._append(packet, phase=ReviewPhase.ADJUDICATOR_INITIAL, **kwargs)
 
     def lock_replacement(self, packet: ReviewerPacket, *, replaces_event_id: str, **kwargs: Any) -> ReviewEvent:
         source = next((event for event in self._events if event.event_id == replaces_event_id), None)
-        if source is None or source.packet_key != packet.packet_key or source.phase is not ReviewPhase.INITIAL:
-            raise ReviewError("replacement must reference an initial assessment for this packet")
+        if (
+            source is None
+            or source.packet_key != packet.packet_key
+            or source.phase not in {ReviewPhase.INITIAL, ReviewPhase.ADJUDICATOR_INITIAL}
+        ):
+            raise ReviewError("replacement must reference an initial or adjudicator assessment for this packet")
+        if source.phase is ReviewPhase.INITIAL and any(
+            event.packet_key == packet.packet_key
+            and event.phase in {ReviewPhase.ADJUDICATOR_INITIAL, ReviewPhase.ADJUDICATION}
+            for event in self._events
+        ):
+            raise ReviewError("replace a compromised initial assessment before adjudication begins")
+        if source.phase is ReviewPhase.ADJUDICATOR_INITIAL and any(
+            event.packet_key == packet.packet_key and event.phase is ReviewPhase.ADJUDICATION
+            for event in self._events
+        ):
+            raise ReviewError("replace a compromised adjudicator assessment before adjudication is locked")
         if not source.blinding_compromised:
             raise ReviewError("only a compromised initial assessment can be replaced")
         if any(event.replaces_event_id == replaces_event_id for event in self._events):
@@ -288,12 +435,15 @@ class ReviewLedger:
         )
 
     def append_adjudication(self, packet: ReviewerPacket, **kwargs: Any) -> ReviewEvent:
-        prior = [event for event in self._events if event.packet_key == packet.packet_key]
         independent = self._active_initial(packet.packet_key)
-        adjudicator_initial = [event for event in prior if event.phase is ReviewPhase.ADJUDICATOR_INITIAL]
-        if len(independent) != 2 or len(adjudicator_initial) != 1:
-            raise ReviewError("adjudication requires two locked initial reviews and the adjudicator's locked initial review")
-        if adjudicator_initial[0].reviewer_pseudonym != kwargs.get("reviewer_pseudonym"):
+        adjudicator_initial = self._active_adjudicator_initial(packet.packet_key)
+        if (
+            len(independent) != 2
+            or independent[0].action == independent[1].action
+            or adjudicator_initial is None
+        ):
+            raise ReviewError("adjudication requires two disagreeing reviews and the adjudicator's locked initial review")
+        if adjudicator_initial.reviewer_pseudonym != kwargs.get("reviewer_pseudonym"):
             raise ReviewError("adjudication must be recorded by the reviewer who locked the third independent assessment")
         return self._append(packet, phase=ReviewPhase.ADJUDICATION, **kwargs)
 
@@ -312,13 +462,17 @@ class ReviewLedger:
         source_recognized: bool = False,
         unavoidable_exposure: tuple[str, ...] = (),
     ) -> ReviewEvent:
-        if not reviewer_pseudonym.strip():
+        if not isinstance(reviewer_pseudonym, str) or not reviewer_pseudonym.strip():
             raise ReviewError("reviewer pseudonym must be non-empty")
-        if not rationale.strip():
+        if not isinstance(rationale, str) or not rationale.strip():
             raise ReviewError("each locked assessment requires a rationale")
         if evidence_basis not in {"decision_time", "retrospective", "mixed", "insufficient"}:
             raise ReviewError("evidence_basis must distinguish decision-time and retrospective evidence")
+        rationale = redact_credential_like_text(rationale)
         _assert_no_protected_disclosure(rationale)
+        exposure = tuple(redact_credential_like_text(str(value)) for value in unavoidable_exposure)
+        for value in exposure:
+            _assert_no_protected_disclosure(value)
         existing = [event for event in self._events if event.packet_key == packet.packet_key]
         if phase in {ReviewPhase.INITIAL, ReviewPhase.REPLACEMENT, ReviewPhase.ADJUDICATOR_INITIAL}:
             if any(event.reviewer_pseudonym == reviewer_pseudonym for event in existing):
@@ -345,7 +499,7 @@ class ReviewLedger:
             evidence_basis=evidence_basis,
             blinding_compromised=blinding_compromised,
             source_recognized=source_recognized,
-            unavoidable_exposure=tuple(unavoidable_exposure),
+            unavoidable_exposure=exposure,
             timestamp_utc=self._clock(),
             replaces_event_id=replaces_event_id,
         )
@@ -403,14 +557,37 @@ class ReviewLedger:
             active.append(selected)
         return active
 
+    def _active_adjudicator_initial(self, packet_key: str) -> ReviewEvent | None:
+        original = next(
+            (
+                event for event in self._events
+                if event.packet_key == packet_key and event.phase is ReviewPhase.ADJUDICATOR_INITIAL
+            ),
+            None,
+        )
+        if original is None:
+            return None
+        replacement = next(
+            (event for event in self._events if event.replaces_event_id == original.event_id),
+            None,
+        )
+        selected = replacement or original
+        return None if selected.blinding_compromised else selected
+
     def persist_append_only(self, path: str | Path, event: ReviewEvent) -> None:
         """Append one locked event without replacing prior reviewer judgments."""
         destination = Path(path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         payload = (json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
-        descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(destination, flags, 0o600)
         try:
-            os.write(descriptor, payload)
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise ReviewError("review event target must be a regular file")
+            os.fchmod(descriptor, 0o600)
+            written = 0
+            while written < len(payload):
+                written += os.write(descriptor, payload[written:])
         finally:
             os.close(descriptor)
 
@@ -419,7 +596,9 @@ def _valid_action(kind: ReviewKind, action: str, assessable: bool, phase: Review
     if phase is ReviewPhase.ADJUDICATION and action == "unresolved" and not assessable:
         return True
     if kind is ReviewKind.CANDIDATE_RELEVANCE:
-        return action in {item.value for item in RelevanceLabel} and (action != "unknown" or not assessable)
+        return (
+            action in {RelevanceLabel.RELEVANT.value, RelevanceLabel.IRRELEVANT.value} and assessable
+        ) or (action == RelevanceLabel.UNKNOWN.value and not assessable)
     return (action in {item.value for item in Decision} and assessable) or (action == "unassessable" and not assessable)
 
 
@@ -447,3 +626,63 @@ def decision_conformity_outcome(
         if system_decision is independently_justified_action
         else DecisionConformity.INCORRECT
     )
+
+
+def apply_candidate_review_labels(pairs: Iterable[Any], ledger: ReviewLedger) -> None:
+    """Attach resolved candidate labels to restricted slots without changing evidence."""
+    for pair in pairs:
+        arms = pair.arms if hasattr(pair, "arms") else pair.get("arms", {})
+        for arm in arms.values():
+            slots = arm.slots if hasattr(arm, "slots") else arm.get("slots", ())
+            for slot in slots:
+                key = slot.opaque_candidate_key if hasattr(slot, "opaque_candidate_key") else slot.get("opaque_candidate_key")
+                if not key:
+                    continue
+                resolution, label = ledger.candidate_resolution(key)
+                if hasattr(slot, "review_resolution"):
+                    slot.review_resolution = resolution
+                    slot.relevance_label = label
+                else:
+                    slot["review_resolution"] = resolution.value
+                    slot["relevance_label"] = label.value if label else None
+
+
+def decision_outcomes_by_pair(
+    pairs: Iterable[Any],
+    ledger: ReviewLedger,
+    packet_keys_by_pair: dict[str, str],
+    *,
+    task_gates_approved: dict[str, bool] | bool = False,
+) -> dict[str, DecisionConformity]:
+    """Apply blinded action reviews only after lock, then compare evaluator-side decisions."""
+    outcomes: dict[str, DecisionConformity] = {}
+    for pair in pairs:
+        pair_id = pair.pair_id if hasattr(pair, "pair_id") else pair.get("pair_id")
+        arms = pair.arms if hasattr(pair, "arms") else pair.get("arms", {})
+        scout = arms.get(ArmName.SKILLSCOUT, arms.get(ArmName.SKILLSCOUT.value))
+        if scout is None:
+            outcomes[str(pair_id)] = DecisionConformity.INDETERMINATE
+            continue
+        key = packet_keys_by_pair.get(str(pair_id))
+        resolution, proposed_action, assessable = (
+            ledger.decision_action(key) if key else (ReviewResolution.UNRESOLVED, None, False)
+        )
+        task_id = pair.task_id if hasattr(pair, "task_id") else pair.get("task_id")
+        approved = task_gates_approved.get(str(task_id), False) if isinstance(task_gates_approved, dict) else task_gates_approved
+        valid = (
+            scout.primary_response_valid if hasattr(scout, "primary_response_valid")
+            else scout.get("primary_response_valid", False)
+        )
+        status = scout.status if hasattr(scout, "status") else scout.get("status")
+        status = getattr(status, "value", status)
+        system_decision = scout.decision if hasattr(scout, "decision") else scout.get("decision")
+        system_decision = Decision(system_decision) if system_decision is not None and not isinstance(system_decision, Decision) else system_decision
+        outcomes[str(pair_id)] = decision_conformity_outcome(
+            system_decision,
+            proposed_action,
+            assessable=assessable,
+            review_resolution=resolution,
+            task_gates_approved=approved,
+            arm_valid=bool(valid) and status in {ArmStatus.PARTIAL.value, ArmStatus.COMPLETE.value},
+        )
+    return outcomes

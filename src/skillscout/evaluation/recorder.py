@@ -6,7 +6,7 @@ import math
 import re
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
@@ -43,7 +43,12 @@ from skillscout.evaluation.protocol import (
     skillscout_input,
     load_dataset,
 )
-from skillscout.evaluation.fixtures import materialize_opaque_contexts, verify_fixture_pack
+from skillscout.evaluation.fixtures import (
+    has_credential_like_text,
+    materialize_opaque_contexts,
+    redact_credential_like_text,
+    verify_fixture_pack,
+)
 
 
 class Clock(Protocol):
@@ -68,6 +73,7 @@ class LookupRequest:
     kind: str
     arm_content_hash: str | None
     arm_revision: str | None
+    timeout_cap_s: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +117,86 @@ def utc_text(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+_SAFE_RESPONSE_HEADERS = {"date", "etag", "request-id", "x-request-id"}
+
+
+def _safe_text(value: str | None, *, limit: int = 500) -> str | None:
+    if value is None:
+        return None
+    return redact_credential_like_text(str(value))[:limit]
+
+
+def _safe_metadata(value: Mapping[str, str]) -> dict[str, str]:
+    return {
+        str(key): _safe_text(str(item), limit=200) or ""
+        for key, item in value.items()
+        if str(key).casefold() in _SAFE_RESPONSE_HEADERS
+    }
+
+
+def _safe_error_category(value: str) -> str:
+    value = str(value)
+    if has_credential_like_text(value):
+        return "sensitive_error_category_redacted"
+    return value[:100] if re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", value) else "unspecified_error"
+
+
+def _supplemental_response(response: PrimaryResponse) -> dict[str, object]:
+    """Retain bounded late metadata without making it a primary arm result."""
+    if not isinstance(response, PrimaryResponse):
+        return {"malformed": True}
+    if not isinstance(response.candidates, (tuple, list)):
+        return {"malformed": True, "decision": None}
+    if any(
+        not isinstance(candidate, CandidateObservation)
+        or not isinstance(candidate.stable_id, str)
+        or any(
+            has_credential_like_text(str(value or ""))
+            for value in (
+                candidate.stable_id,
+                str(candidate.source_slug or ""),
+                str(candidate.source_url or ""),
+                str(candidate.arm_content_hash or ""),
+                str(candidate.arm_revision or ""),
+            )
+        )
+        or any(
+            len(str(value or "")) > 2048
+            for value in (
+                candidate.stable_id,
+                candidate.source_slug,
+                candidate.source_url,
+                candidate.arm_content_hash,
+                candidate.arm_revision,
+            )
+        )
+        for candidate in response.candidates[:SLOTS_PER_ARM]
+    ):
+        return {
+            "malformed": True,
+            "candidate_metadata_redacted": True,
+            "decision": response.decision.value if isinstance(response.decision, Decision) else None,
+            "partial": bool(response.partial),
+            "metadata": _safe_metadata(response.metadata) if isinstance(response.metadata, Mapping) else {},
+        }
+    return {
+        "decision": response.decision.value if isinstance(response.decision, Decision) else None,
+        "partial": bool(response.partial),
+        "candidates": [
+            {
+                "stable_id": candidate.stable_id,
+                "source_slug": candidate.source_slug,
+                "rank": candidate.rank,
+                "content_hash": candidate.arm_content_hash,
+                "revision": candidate.arm_revision,
+            }
+            for candidate in response.candidates[:SLOTS_PER_ARM]
+            if isinstance(candidate, CandidateObservation)
+        ],
+        "metadata": _safe_metadata(response.metadata) if isinstance(response.metadata, Mapping) else {},
+    }
+
+
 def _empty_slots(status: SlotStatus) -> list[CandidateSlot]:
     return [CandidateSlot(position=i, status=status) for i in range(1, SLOTS_PER_ARM + 1)]
 
@@ -140,6 +226,7 @@ class EvaluationRecorder:
         self.invocation_timeout_s = invocation_timeout_s
         self.pairing_window_s = pairing_window_s
         self.lookup_budget_s = lookup_budget_s
+        self._provided_crosswalk = crosswalk
         self.crosswalk = crosswalk or CandidateCrosswalk()
         if min(invocation_timeout_s, pairing_window_s, lookup_budget_s) <= 0:
             raise ValueError("protocol deadlines must be positive")
@@ -178,6 +265,9 @@ class EvaluationRecorder:
                 raise ValueError("system-facing project paths must not disclose evaluator task IDs")
             if not re.fullmatch(r"[0-9a-f]{64}", context_hashes[task.task_id]):
                 raise ValueError("each context manifest hash must be lowercase SHA-256")
+
+        if self._provided_crosswalk is None:
+            self.crosswalk = CandidateCrosswalk()
 
         task_by_id = {task.task_id: task for task in tasks}
         records: list[PairRecord] = []
@@ -394,6 +484,7 @@ class EvaluationRecorder:
             if arm is ArmName.SKILLSCOUT
             else ordinary_search_input(task_text)
         )
+        start_utc = utc_text(self.clock.utcnow())
         start = self.clock.monotonic()
         if not_after is not None and start > not_after:
             return ArmRecord(
@@ -404,11 +495,12 @@ class EvaluationRecorder:
                 underlying_termination=TerminationStatus.UNKNOWN,
                 slots=_empty_slots(SlotStatus.NOT_RUN),
             )
-        start_utc = utc_text(self.clock.utcnow())
         try:
             returned = self.handlers.for_arm(arm)(request, self.invocation_timeout_s)
             if not isinstance(returned, InvocationReturn):
                 raise TypeError("runner must return InvocationReturn")
+            if not isinstance(returned.termination_status, TerminationStatus):
+                raise TypeError("runner returned an invalid termination status")
         except InvocationFailure as exc:
             end = self.clock.monotonic()
             status = ArmStatus.FAILED
@@ -425,9 +517,13 @@ class EvaluationRecorder:
                 invocation_end_utc=utc_text(self.clock.utcnow()),
                 response_latency_s=max(0.0, end - start),
                 harness_outcome="timeout" if timeout else ("harness_failure" if "harness" in exc.category else "terminal_error"),
-                underlying_termination=exc.termination_status,
-                termination_evidence=exc.termination_evidence or None,
-                error_category="invocation_timeout" if timeout else exc.category,
+                underlying_termination=(
+                    exc.termination_status
+                    if isinstance(exc.termination_status, TerminationStatus)
+                    else TerminationStatus.UNKNOWN
+                ),
+                termination_evidence=_safe_text(exc.termination_evidence) or None,
+                error_category="invocation_timeout" if timeout else _safe_error_category(exc.category),
                 decision=None,
                 primary_response_valid=False,
                 slots=_empty_slots(SlotStatus.FAILED),
@@ -481,11 +577,12 @@ class EvaluationRecorder:
                 response_latency_s=elapsed,
                 harness_outcome="timeout",
                 underlying_termination=returned.termination_status,
-                termination_evidence=returned.termination_evidence,
+                termination_evidence=_safe_text(returned.termination_evidence),
                 error_category="invocation_timeout",
                 decision=None,
                 primary_response_valid=False,
                 late_primary_response=True,
+                supplemental_late_response=_supplemental_response(returned.response),
                 slots=_empty_slots(SlotStatus.FAILED),
             )
         response = returned.response
@@ -527,11 +624,11 @@ class EvaluationRecorder:
             response_latency_s=elapsed,
             harness_outcome="returned",
             underlying_termination=returned.termination_status,
-            termination_evidence=returned.termination_evidence,
+            termination_evidence=_safe_text(returned.termination_evidence),
             decision=response.decision if arm is ArmName.SKILLSCOUT else None,
             primary_response_valid=True,
             internal_attempt_count=response.internal_attempt_count,
-            returned_metadata=dict(response.metadata),
+            returned_metadata=_safe_metadata(response.metadata),
             slots=slots,
         )
 
@@ -539,14 +636,51 @@ class EvaluationRecorder:
     def _response_error(arm: ArmName, response: PrimaryResponse) -> str | None:
         if not isinstance(response, PrimaryResponse):
             return "malformed_response"
+        if not isinstance(response.candidates, (tuple, list)) or not all(
+            isinstance(candidate, CandidateObservation) for candidate in response.candidates
+        ):
+            return "malformed_candidate_list"
+        if not isinstance(response.partial, bool) or not isinstance(response.metadata, Mapping):
+            return "malformed_response_metadata"
+        if response.decision is not None and not isinstance(response.decision, Decision):
+            return "malformed_decision"
         if len(response.candidates) > SLOTS_PER_ARM:
             return "malformed_response_more_than_three_candidates"
         if arm is ArmName.ORDINARY_SEARCH and response.decision is not None:
             return "baseline_decision_must_be_null"
         for position, candidate in enumerate(response.candidates, start=1):
-            if not candidate.stable_id or candidate.rank != position:
+            if (
+                not isinstance(candidate.stable_id, str)
+                or not candidate.stable_id
+                or not isinstance(candidate.rank, int)
+                or isinstance(candidate.rank, bool)
+                or candidate.rank != position
+            ):
                 return "malformed_candidate_identity_or_order"
-        if response.internal_attempt_count is not None and response.internal_attempt_count < 1:
+            optional_values = (
+                candidate.source_slug,
+                candidate.source_url,
+                candidate.arm_content_hash,
+                candidate.arm_revision,
+            )
+            if any(value is not None and not isinstance(value, str) for value in optional_values):
+                return "malformed_candidate_metadata_type"
+            values = (
+                candidate.stable_id,
+                candidate.source_slug or "",
+                candidate.source_url or "",
+                candidate.arm_content_hash or "",
+                candidate.arm_revision or "",
+            )
+            if any(len(value) > 2048 for value in values):
+                return "malformed_candidate_metadata_length"
+            if any(has_credential_like_text(value) for value in values):
+                return "sensitive_candidate_metadata_redacted"
+        if response.internal_attempt_count is not None and (
+            not isinstance(response.internal_attempt_count, int)
+            or isinstance(response.internal_attempt_count, bool)
+            or response.internal_attempt_count < 1
+        ):
             return "invalid_attempt_count"
         return None
 
@@ -597,12 +731,9 @@ class EvaluationRecorder:
 
     @staticmethod
     def _requires_review_stop(record: ArmRecord) -> bool:
-        harness_failure = record.harness_outcome == "harness_failure" or bool(
-            record.error_category and record.error_category.startswith("harness_failure")
-        )
         return (
             record.status is ArmStatus.FAILED
-            and (record.error_category == "invocation_timeout" or harness_failure)
+            and record.invocation_start_monotonic_s is not None
             and record.underlying_termination in {TerminationStatus.NOT_CONFIRMED, TerminationStatus.UNKNOWN}
         )
 
@@ -725,6 +856,7 @@ class EvaluationRecorder:
 
     def _do_lookup(self, request: LookupRequest, deadline: float) -> LookupRecord:
         assert self.lookup is not None
+        start_utc = utc_text(self.clock.utcnow())
         start = self.clock.monotonic()
         if start >= deadline:
             return LookupRecord(
@@ -732,9 +864,12 @@ class EvaluationRecorder:
                 status=LookupStatus.NOT_STARTED_AFTER_DEADLINE,
                 error_category="shared_lookup_deadline_reached",
             )
-        start_utc = utc_text(self.clock.utcnow())
         try:
-            result = self.lookup(request)
+            result = self.lookup(replace(request, timeout_cap_s=deadline - start))
+            if not isinstance(result, LookupObservation):
+                raise TypeError("lookup handler must return LookupObservation")
+            if not isinstance(result.termination_status, TerminationStatus):
+                raise TypeError("lookup handler returned an invalid termination status")
         except InvocationFailure as exc:
             end = self.clock.monotonic()
             timed_out = exc.category in {"lookup_timeout", "harness_timeout", "timeout"}
@@ -746,10 +881,14 @@ class EvaluationRecorder:
                 end_monotonic_s=end,
                 start_utc=start_utc,
                 end_utc=utc_text(self.clock.utcnow()),
-                error_category=exc.category,
+                error_category=_safe_error_category(exc.category),
                 timeout=timed_out,
-                termination_status=exc.termination_status,
-                termination_evidence=exc.termination_evidence or None,
+                termination_status=(
+                    exc.termination_status
+                    if isinstance(exc.termination_status, TerminationStatus)
+                    else TerminationStatus.UNKNOWN
+                ),
+                termination_evidence=_safe_text(exc.termination_evidence) or None,
                 late=end > deadline,
             )
         except Exception as exc:  # noqa: BLE001 - keep failure separate from unknown evidence.
@@ -768,6 +907,27 @@ class EvaluationRecorder:
             )
         end = self.clock.monotonic()
         late = end > deadline
+        sensitive_values = (
+            str(result.returned_candidate_id or ""),
+            str(result.content_hash or ""),
+            str(result.revision or ""),
+            str(result.audit_status or ""),
+            *[str(value) for value in result.response_metadata.values()],
+        )
+        if any(has_credential_like_text(value) for value in sensitive_values):
+            return LookupRecord(
+                kind=request.kind,
+                status=LookupStatus.FAILED,
+                attempt_count=1,
+                start_monotonic_s=start,
+                end_monotonic_s=end,
+                start_utc=start_utc,
+                end_utc=utc_text(self.clock.utcnow()),
+                error_category="sensitive_lookup_metadata_redacted",
+                termination_status=result.termination_status,
+                termination_evidence=_safe_text(result.termination_evidence),
+                late=late,
+            )
         successful = result.success
         identity_linkage = result.identity_linkage
         revision_linkage = result.revision_linkage
@@ -791,9 +951,9 @@ class EvaluationRecorder:
             start_utc=start_utc,
             end_utc=utc_text(self.clock.utcnow()),
             http_status=result.http_status,
-            error_category=result.error_category,
+            error_category=_safe_error_category(result.error_category) if result.error_category else None,
             termination_status=result.termination_status,
-            termination_evidence=result.termination_evidence,
+            termination_evidence=_safe_text(result.termination_evidence),
             late=late,
             returned_candidate_id=result.returned_candidate_id,
             content_hash=result.content_hash,
@@ -805,7 +965,7 @@ class EvaluationRecorder:
             detail_sufficient_for_relevance=(
                 result.detail_sufficient_for_relevance if request.kind == "detail" else None
             ),
-            response_metadata=dict(result.response_metadata),
+            response_metadata=_safe_metadata(result.response_metadata),
         )
 
     def _compute_evidence_ready(self, pair: PairRecord) -> None:

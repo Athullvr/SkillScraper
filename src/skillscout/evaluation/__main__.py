@@ -10,7 +10,8 @@ from pathlib import Path
 from skillscout.evaluation.fixtures import DEFAULT_INCOMPLETE_FACTS, pin_fixture_pack, verify_fixture_pack
 from skillscout.evaluation.metrics import compute_metrics
 from skillscout.evaluation.protocol import DATASET_RELATIVE_PATH, find_repository_root, load_dataset
-from skillscout.evaluation.store import RunStoreError, read_run
+from skillscout.evaluation.reviews import ReviewLedger, apply_candidate_review_labels, decision_outcomes_by_pair
+from skillscout.evaluation.store import RunStoreError, read_run_bundle
 from skillscout.evaluation.validation import validate_records
 
 
@@ -54,7 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
 
-        manifest, pairs = read_run(args.run_directory)
+        run = read_run_bundle(args.run_directory)
+        manifest, pairs = run.manifest, run.pairs
         dataset = load_dataset(_repository_root() / DATASET_RELATIVE_PATH)
         errors = validate_records(pairs, dataset.eligible_tasks, dataset_sha256=manifest.get("dataset_sha256", ""))
         if args.command == "validate":
@@ -67,7 +69,23 @@ def main(argv: list[str] | None = None) -> int:
             print("run validation failed; metrics not produced:", file=sys.stderr)
             print("\n".join(errors), file=sys.stderr)
             return 1
-        report = compute_metrics(pairs, dataset.eligible_tasks)
+        ledger = ReviewLedger.from_records(run.review_events)
+        apply_candidate_review_labels(pairs, ledger)
+        decision_packet_keys = {
+            entry["pair_id"]: entry["opaque_decision_packet_key"]
+            for entry in run.decision_crosswalk
+        }
+        decision_outcomes = decision_outcomes_by_pair(
+            pairs,
+            ledger,
+            decision_packet_keys,
+            task_gates_approved=manifest.get("decision_gates_approved_by_task") or False,
+        )
+        report = compute_metrics(
+            pairs,
+            dataset.eligible_tasks,
+            decision_outcomes=decision_outcomes,
+        )
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0
     except (OSError, ValueError, RunStoreError) as exc:
