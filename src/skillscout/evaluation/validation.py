@@ -42,8 +42,7 @@ def _num(value: Any) -> bool:
 def _review_stop_required(arm: Any) -> bool:
     termination = _value(_get(arm, "underlying_termination"))
     return (
-        _value(_get(arm, "status")) == ArmStatus.FAILED.value
-        and _get(arm, "invocation_start_monotonic_s") is not None
+        _get(arm, "invocation_start_monotonic_s") is not None
         and termination in {TerminationStatus.NOT_CONFIRMED.value, TerminationStatus.UNKNOWN.value}
     )
 

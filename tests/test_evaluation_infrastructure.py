@@ -270,6 +270,33 @@ def test_pairing_deadline_is_inclusive_and_late_second_arm_is_not_dispatched(
         assert calls == [plan.arm_order[0]]
 
 
+def test_primary_response_at_exact_240_second_cap_is_valid():
+    clock = FakeClock()
+
+    def invoke(arm):
+        def call(_payload, _cap):
+            clock.advance(240.0 if not calls else 0.01)
+            calls.append(arm)
+            return InvocationReturn(
+                PrimaryResponse(decision=Decision.REVIEW if arm is ArmName.SKILLSCOUT else None),
+                TerminationStatus.CONFIRMED,
+                "terminal response received",
+            )
+
+        return call
+
+    calls: list[ArmName] = []
+    plan = build_schedule(TASKS)[0]
+    pair = EvaluationRecorder(
+        InvocationHandlers(invoke(ArmName.SKILLSCOUT), invoke(ArmName.ORDINARY_SEARCH)),
+        clock=clock,
+    ).record_pair(plan, TASKS[0], "/tmp/opaque", "d" * 64, run_id="cap-boundary")
+    first = pair.arms[plan.arm_order[0]]
+    assert first.status is ArmStatus.COMPLETE
+    assert first.response_latency_s == 240.0
+    assert pair.pairing_within_window is True
+
+
 def test_unconfirmed_invocation_timeout_stops_second_arm_and_all_later_invocations(tmp_path: Path):
     calls: list[ArmName] = []
     clock = FakeClock()
@@ -465,10 +492,12 @@ def test_shared_lookup_budget_starts_after_both_terminal_arms_and_late_evidence_
 def test_lookup_callbacks_receive_remaining_shared_budget_as_timeout_cap():
     clock = FakeClock()
     caps: list[float] = []
+    deadlines: list[float | None] = []
 
     def lookup(request):
         assert request.timeout_cap_s is not None
         caps.append(request.timeout_cap_s)
+        deadlines.append(request.deadline_monotonic_s)
         clock.advance(0.25)
         return LookupObservation(success=True, returned_candidate_id=request.candidate_id)
 
@@ -479,7 +508,38 @@ def test_lookup_callbacks_receive_remaining_shared_budget_as_timeout_cap():
     assert len(caps) == 4
     assert caps[0] == pytest.approx(600.0)
     assert caps == sorted(caps, reverse=True)
+    assert deadlines and all(item == pair.lookup_deadline_monotonic_s for item in deadlines)
     assert pair.lookup_deadline_monotonic_s - pair.lookup_budget_start_monotonic_s == pytest.approx(600.0)
+
+
+def test_parseable_partial_results_keep_absent_slots_unknown():
+    clock = FakeClock()
+
+    def invoke(arm):
+        def call(_payload, _cap):
+            clock.advance(0.01)
+            return InvocationReturn(
+                PrimaryResponse(
+                    candidates=(CandidateObservation("owner/repo/skill", rank=1),),
+                    decision=Decision.REVIEW if arm is ArmName.SKILLSCOUT else None,
+                    partial=True,
+                ),
+                TerminationStatus.CONFIRMED,
+                "partial response received",
+            )
+
+        return call
+
+    recorder = EvaluationRecorder(
+        InvocationHandlers(invoke(ArmName.SKILLSCOUT), invoke(ArmName.ORDINARY_SEARCH)),
+        clock=clock,
+    )
+    plan = build_schedule(TASKS)[0]
+    pair = recorder.record_pair(plan, TASKS[0], "/tmp/opaque", "c" * 64, run_id="partial-result")
+    assert pair.status.value == "partial"
+    for arm in pair.arms.values():
+        assert [slot.status for slot in arm.slots] == [SlotStatus.OCCUPIED, SlotStatus.UNKNOWN, SlotStatus.UNKNOWN]
+        assert arm.primary_response_valid is True
 
 
 def test_missing_candidate_identity_or_observed_revision_keeps_detail_unknown(tmp_path: Path):

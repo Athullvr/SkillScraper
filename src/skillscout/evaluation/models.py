@@ -127,6 +127,14 @@ class InvocationFailure(RuntimeError):
         self.harness_outcome = harness_outcome or category
 
 
+class InvocationNotStarted(RuntimeError):
+    """The adapter declined dispatch before an operation actually began."""
+
+    def __init__(self, category: str) -> None:
+        super().__init__(category)
+        self.category = category
+
+
 @dataclass(slots=True)
 class LookupRecord:
     kind: str

@@ -18,6 +18,7 @@ from skillscout.evaluation.models import (
     CandidateSlot,
     Decision,
     InvocationFailure,
+    InvocationNotStarted,
     InvocationReturn,
     LinkageStatus,
     LookupRecord,
@@ -74,6 +75,7 @@ class LookupRequest:
     arm_content_hash: str | None
     arm_revision: str | None
     timeout_cap_s: float | None = None
+    deadline_monotonic_s: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +96,7 @@ class LookupObservation:
     termination_evidence: str = "lookup callback returned a terminal observation"
 
 
-PrimaryInvoker = Callable[[dict[str, object], int], InvocationReturn]
+PrimaryInvoker = Callable[..., InvocationReturn]
 EvidenceLookup = Callable[[LookupRequest], LookupObservation]
 
 
@@ -102,9 +104,30 @@ EvidenceLookup = Callable[[LookupRequest], LookupObservation]
 class InvocationHandlers:
     skillscout: PrimaryInvoker
     ordinary_search: PrimaryInvoker
+    deadline_aware: frozenset[ArmName] = frozenset()
+    production_runtime: bool = False
 
     def for_arm(self, arm: ArmName) -> PrimaryInvoker:
         return self.skillscout if arm is ArmName.SKILLSCOUT else self.ordinary_search
+
+    def invoke(
+        self,
+        arm: ArmName,
+        payload: dict[str, object],
+        timeout_s: int,
+        *,
+        not_after_monotonic_s: float | None = None,
+        invocation_deadline_monotonic_s: float | None = None,
+    ) -> InvocationReturn:
+        handler = self.for_arm(arm)
+        if arm in self.deadline_aware:
+            return handler(
+                payload,
+                timeout_s,
+                not_after_monotonic_s=not_after_monotonic_s,
+                invocation_deadline_monotonic_s=invocation_deadline_monotonic_s,
+            )
+        return handler(payload, timeout_s)
 
 
 class RunModeError(ValueError):
@@ -204,9 +227,9 @@ def _empty_slots(status: SlotStatus) -> list[CandidateSlot]:
 class EvaluationRecorder:
     """Record the fixed schedule using injected, offline/mock invocation callbacks.
 
-    The callbacks receive only arm-specific system inputs and a timeout cap. They
-    must enforce the cap at their process/transport boundary and report termination
-    evidence. This module contains no catalog client or live-run adapter.
+    Callbacks receive only arm-specific system inputs and a timeout cap. Runtime
+    adapters may additionally receive a non-payload monotonic dispatch boundary.
+    This module does not itself contact the catalog.
     """
 
     def __init__(
@@ -245,6 +268,8 @@ class EvaluationRecorder:
         """Run callbacks only in offline/mocked mode; live collection is rejected."""
         if catalog_mode not in {"offline", "mocked"}:
             raise RunModeError("live catalog collection is disabled in this milestone")
+        if self.handlers.production_runtime:
+            raise RunModeError("production runtime handlers cannot be run in offline or mocked mode")
         if dataset_sha256 != DATASET_SHA256:
             raise ValueError("recorder refuses a dataset hash other than the approved v1 hash")
         if set(context_paths) != {task.task_id for task in tasks}:
@@ -496,11 +521,27 @@ class EvaluationRecorder:
                 slots=_empty_slots(SlotStatus.NOT_RUN),
             )
         try:
-            returned = self.handlers.for_arm(arm)(request, self.invocation_timeout_s)
+            returned = self.handlers.invoke(
+                arm,
+                request,
+                self.invocation_timeout_s,
+                not_after_monotonic_s=not_after,
+                invocation_deadline_monotonic_s=start + self.invocation_timeout_s,
+            )
             if not isinstance(returned, InvocationReturn):
                 raise TypeError("runner must return InvocationReturn")
             if not isinstance(returned.termination_status, TerminationStatus):
                 raise TypeError("runner returned an invalid termination status")
+        except InvocationNotStarted as exc:
+            return ArmRecord(
+                arm=arm,
+                status=ArmStatus.NOT_RUN,
+                invocation_timeout_s=self.invocation_timeout_s,
+                error_category=_safe_error_category(exc.category),
+                underlying_termination=TerminationStatus.CONFIRMED,
+                termination_evidence="runtime adapter confirmed no arm operation was dispatched",
+                slots=_empty_slots(SlotStatus.NOT_RUN),
+            )
         except InvocationFailure as exc:
             end = self.clock.monotonic()
             status = ArmStatus.FAILED
@@ -732,8 +773,7 @@ class EvaluationRecorder:
     @staticmethod
     def _requires_review_stop(record: ArmRecord) -> bool:
         return (
-            record.status is ArmStatus.FAILED
-            and record.invocation_start_monotonic_s is not None
+            record.invocation_start_monotonic_s is not None
             and record.underlying_termination in {TerminationStatus.NOT_CONFIRMED, TerminationStatus.UNKNOWN}
         )
 
@@ -832,13 +872,18 @@ class EvaluationRecorder:
                                 kind=kind,
                                 arm_content_hash=slot.arm_content_hash,
                                 arm_revision=slot.arm_revision,
+                                deadline_monotonic_s=deadline,
                             ),
                             deadline,
                         )
                         if (
                             lookup_record.termination_status
                             in {TerminationStatus.NOT_CONFIRMED, TerminationStatus.UNKNOWN}
-                            and (lookup_record.timeout or lookup_record.status is LookupStatus.FAILED)
+                            and (
+                                lookup_record.timeout
+                                or lookup_record.status is LookupStatus.FAILED
+                                or lookup_record.status is LookupStatus.AVAILABLE
+                            )
                         ):
                             review_stop = True
                             pair.run_stop_required = True
@@ -895,7 +940,28 @@ class EvaluationRecorder:
                 )
             ):
                 raise TypeError("lookup handler returned malformed observation fields")
+        except InvocationNotStarted as exc:
+            return LookupRecord(
+                kind=request.kind,
+                status=LookupStatus.NOT_STARTED_AFTER_DEADLINE,
+                attempt_count=0,
+                error_category=_safe_error_category(exc.category),
+                termination_status=TerminationStatus.CONFIRMED,
+                termination_evidence="runtime adapter confirmed the lookup was not dispatched",
+            )
         except InvocationFailure as exc:
+            if exc.category in {
+                "lookup_deadline_expired_before_dispatch",
+                "worker_deadline_expired_before_dispatch",
+            } and exc.termination_status is TerminationStatus.CONFIRMED:
+                return LookupRecord(
+                    kind=request.kind,
+                    status=LookupStatus.NOT_STARTED_AFTER_DEADLINE,
+                    attempt_count=0,
+                    error_category=_safe_error_category(exc.category),
+                    termination_status=TerminationStatus.CONFIRMED,
+                    termination_evidence=_safe_text(exc.termination_evidence),
+                )
             end = self.clock.monotonic()
             timed_out = exc.category in {"lookup_timeout", "harness_timeout", "timeout"}
             return LookupRecord(
