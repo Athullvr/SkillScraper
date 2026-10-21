@@ -1,0 +1,9 @@
+{
+  "name": "sample-checkout",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "react": "*",
+    "typescript": "*"
+  }
+}

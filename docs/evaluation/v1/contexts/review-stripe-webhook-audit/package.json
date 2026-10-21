@@ -1,0 +1,8 @@
+{
+  "name": "sample-payment-service",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "stripe": "*"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "sample-profile",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "react": "*",
+    "typescript": "*"
+  }
+}

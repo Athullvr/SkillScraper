@@ -1,0 +1,7 @@
+[package]
+name = "sample-tokio-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "*", features = ["macros", "rt-multi-thread", "signal", "time"] }
