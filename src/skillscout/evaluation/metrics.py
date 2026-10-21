@@ -43,16 +43,7 @@ def _confirmed_relevant(slot: Any, arm: Any) -> bool:
         return False
     if not _get(arm, "primary_response_valid", False):
         return False
-    detail = _get(slot, "detail")
-    if detail is None:
-        return False
-    if _value(_get(detail, "status")) != LookupStatus.AVAILABLE.value or _get(detail, "late", False):
-        return False
-    if _value(_get(detail, "identity_linkage")) != LinkageStatus.MATCHED.value:
-        return False
-    if _value(_get(detail, "revision_linkage")) == LinkageStatus.MISMATCH.value:
-        return False
-    if _get(detail, "detail_sufficient_for_relevance") is not True:
+    if not _confirmed_relevant_evidence(slot):
         return False
     return (
         _value(_get(slot, "relevance_label")) == RelevanceLabel.RELEVANT.value
