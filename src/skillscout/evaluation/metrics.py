@@ -87,14 +87,25 @@ def _slot_outcome(slot: Any, arm: Any) -> str:
 
 def _confirmed_relevant_evidence(slot: Any) -> bool:
     detail = _get(slot, "detail")
-    return bool(
-        detail is not None
-        and _value(_get(detail, "status")) == LookupStatus.AVAILABLE.value
-        and not _get(detail, "late", False)
-        and _value(_get(detail, "identity_linkage")) == LinkageStatus.MATCHED.value
-        and _value(_get(detail, "revision_linkage")) != LinkageStatus.MISMATCH.value
-        and _get(detail, "detail_sufficient_for_relevance") is True
-    )
+    if (
+        detail is None
+        or _value(_get(detail, "status")) != LookupStatus.AVAILABLE.value
+        or _get(detail, "late", False)
+        or _value(_get(detail, "identity_linkage")) != LinkageStatus.MATCHED.value
+        or _get(detail, "returned_candidate_id") != _get(slot, "stable_id")
+        or _get(detail, "detail_sufficient_for_relevance") is not True
+    ):
+        return False
+    arm_hash = _get(slot, "arm_content_hash")
+    arm_revision = _get(slot, "arm_revision")
+    linkage = _value(_get(detail, "revision_linkage"))
+    if arm_hash or arm_revision:
+        return bool(
+            linkage == LinkageStatus.MATCHED.value
+            and (not arm_hash or _get(detail, "content_hash") == arm_hash)
+            and (not arm_revision or _get(detail, "revision") == arm_revision)
+        )
+    return linkage == LinkageStatus.NOT_EXPOSED.value
 
 
 def _all_occupied_evidence_complete(arm: Any) -> bool:

@@ -482,6 +482,39 @@ def test_lookup_callbacks_receive_remaining_shared_budget_as_timeout_cap():
     assert pair.lookup_deadline_monotonic_s - pair.lookup_budget_start_monotonic_s == pytest.approx(600.0)
 
 
+def test_missing_candidate_identity_or_observed_revision_keeps_detail_unknown(tmp_path: Path):
+    clock = FakeClock()
+
+    def lookup(request):
+        clock.advance(0.01)
+        return LookupObservation(
+            success=True,
+            returned_candidate_id=None,
+            content_hash=request.arm_content_hash,
+            revision=None,
+            identity_linkage=LinkageStatus.MATCHED,
+            revision_linkage=LinkageStatus.MATCHED,
+            detail_sufficient_for_relevance=True,
+        )
+
+    recorder = EvaluationRecorder(_handlers(clock, with_candidate=True), lookup=lookup, clock=clock)
+    paths, hashes = _all_context_inputs(tmp_path)
+    pairs = recorder.run_offline(TASKS, paths, hashes, run_id="unlinked-detail")
+    for pair in pairs:
+        for arm in pair.arms.values():
+            for slot in arm.slots:
+                if slot.status is SlotStatus.OCCUPIED:
+                    assert slot.detail is not None
+                    assert slot.detail.identity_linkage is LinkageStatus.UNVERIFIED
+                    assert slot.detail.revision_linkage is LinkageStatus.UNVERIFIED
+                    slot.relevance_label = RelevanceLabel.RELEVANT
+                    slot.review_resolution = ReviewResolution.RESOLVED
+                    assert arm.evidence_ready_monotonic_s is None
+    report = compute_metrics(pairs, TASKS)
+    assert report["slot_outcomes_fixed_126"]["skillscout"].get("relevant", 0) == 0
+    assert report["slot_outcomes_fixed_126"]["skillscout"]["unknown"] == 42
+
+
 def test_uninvoked_arm_means_no_pair_level_lookup_and_unknown_relevance():
     clock = ScriptClock([0.0, 240.0, 301.0])
     calls = []

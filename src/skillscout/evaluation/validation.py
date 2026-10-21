@@ -72,9 +72,7 @@ def _validate_records_unchecked(
     if dataset_sha256 != DATASET_SHA256:
         errors.append("dataset hash does not equal the approved v1 hash")
     canonical_tasks = load_dataset().eligible_tasks
-    if [(task.task_id, task.task_text, task.eligible_index) for task in tasks] != [
-        (task.task_id, task.task_text, task.eligible_index) for task in canonical_tasks
-    ]:
+    if tuple(tasks) != tuple(canonical_tasks):
         errors.append("provided task records do not match the fixed eligible dataset in order")
     if len(pairs) != PLANNED_PAIR_COUNT:
         errors.append(f"expected {PLANNED_PAIR_COUNT} planned pair records, found {len(pairs)}")

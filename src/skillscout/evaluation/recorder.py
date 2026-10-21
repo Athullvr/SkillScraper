@@ -870,6 +870,31 @@ class EvaluationRecorder:
                 raise TypeError("lookup handler must return LookupObservation")
             if not isinstance(result.termination_status, TerminationStatus):
                 raise TypeError("lookup handler returned an invalid termination status")
+            if (
+                not isinstance(result.success, bool)
+                or not isinstance(result.identity_linkage, LinkageStatus)
+                or not isinstance(result.revision_linkage, LinkageStatus)
+                or not isinstance(result.response_metadata, Mapping)
+                or any(
+                    value is not None and not isinstance(value, str)
+                    for value in (
+                        result.returned_candidate_id,
+                        result.content_hash,
+                        result.revision,
+                        result.error_category,
+                        result.audit_status,
+                    )
+                )
+                or any(
+                    value is not None and not isinstance(value, bool)
+                    for value in (result.audit_matches_revision, result.detail_sufficient_for_relevance)
+                )
+                or (
+                    result.http_status is not None
+                    and (not isinstance(result.http_status, int) or isinstance(result.http_status, bool))
+                )
+            ):
+                raise TypeError("lookup handler returned malformed observation fields")
         except InvocationFailure as exc:
             end = self.clock.monotonic()
             timed_out = exc.category in {"lookup_timeout", "harness_timeout", "timeout"}
@@ -929,19 +954,27 @@ class EvaluationRecorder:
                 late=late,
             )
         successful = result.success
-        identity_linkage = result.identity_linkage
-        revision_linkage = result.revision_linkage
-        if result.returned_candidate_id is not None and result.returned_candidate_id != request.candidate_id:
+        if result.returned_candidate_id is None:
+            identity_linkage = LinkageStatus.UNVERIFIED
+        elif result.returned_candidate_id != request.candidate_id:
             identity_linkage = LinkageStatus.MISMATCH
-        if request.kind == "detail" and request.arm_content_hash:
-            if result.content_hash is None:
+        else:
+            identity_linkage = LinkageStatus.MATCHED
+        revision_linkage = result.revision_linkage
+        if request.kind == "detail":
+            observed_revisions = []
+            if request.arm_content_hash:
+                observed_revisions.append((request.arm_content_hash, result.content_hash))
+            if request.arm_revision:
+                observed_revisions.append((request.arm_revision, result.revision))
+            if not observed_revisions:
                 revision_linkage = LinkageStatus.NOT_EXPOSED
-            elif result.content_hash != request.arm_content_hash:
+            elif any(observed is None for _expected, observed in observed_revisions):
+                revision_linkage = LinkageStatus.UNVERIFIED
+            elif any(expected != observed for expected, observed in observed_revisions):
                 revision_linkage = LinkageStatus.MISMATCH
             else:
                 revision_linkage = LinkageStatus.MATCHED
-        elif request.kind == "detail" and not request.arm_content_hash and revision_linkage is LinkageStatus.NOT_APPLICABLE:
-            revision_linkage = LinkageStatus.NOT_EXPOSED
         return LookupRecord(
             kind=request.kind,
             status=LookupStatus.AVAILABLE if successful else LookupStatus.FAILED,
@@ -985,7 +1018,14 @@ class EvaluationRecorder:
                 and slot.detail.status is LookupStatus.AVAILABLE
                 and not slot.detail.late
                 and slot.detail.identity_linkage is LinkageStatus.MATCHED
-                and slot.detail.revision_linkage is not LinkageStatus.MISMATCH
+                and slot.detail.returned_candidate_id == slot.stable_id
+                and (
+                    slot.detail.revision_linkage is LinkageStatus.MATCHED
+                    if slot.arm_content_hash or slot.arm_revision
+                    else slot.detail.revision_linkage is LinkageStatus.NOT_EXPOSED
+                )
+                and (not slot.arm_content_hash or slot.detail.content_hash == slot.arm_content_hash)
+                and (not slot.arm_revision or slot.detail.revision == slot.arm_revision)
                 and slot.detail.detail_sufficient_for_relevance is True
                 for slot in occupied
             )
