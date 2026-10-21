@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -33,6 +34,7 @@ class ReviewKind(StrEnum):
 
 class ReviewPhase(StrEnum):
     INITIAL = "initial"
+    REPLACEMENT = "replacement"
     ADJUDICATOR_INITIAL = "adjudicator_initial"
     ADJUDICATION = "adjudication"
 
@@ -195,8 +197,16 @@ def build_decision_conformity_packet(
     return packet
 
 
+def shuffle_packets(packets: Iterable[ReviewerPacket], *, seed: int) -> tuple[ReviewerPacket, ...]:
+    """Return a reproducible, recorded-seed review order without exposing the crosswalk."""
+    result = list(packets)
+    random.Random(seed).shuffle(result)
+    return tuple(result)
+
+
 @dataclass(frozen=True, slots=True)
 class ReviewEvent:
+    event_id: str
     packet_key: str
     kind: ReviewKind
     phase: ReviewPhase
@@ -209,6 +219,7 @@ class ReviewEvent:
     source_recognized: bool
     unavoidable_exposure: tuple[str, ...]
     timestamp_utc: str
+    replaces_event_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -257,11 +268,28 @@ class ReviewLedger:
         )
 
     def lock_adjudicator_initial(self, packet: ReviewerPacket, **kwargs: Any) -> ReviewEvent:
+        if len(self._active_initial(packet.packet_key)) != 2:
+            raise ReviewError("adjudicator must lock after both initial reviews exist")
         return self._append(packet, phase=ReviewPhase.ADJUDICATOR_INITIAL, **kwargs)
+
+    def lock_replacement(self, packet: ReviewerPacket, *, replaces_event_id: str, **kwargs: Any) -> ReviewEvent:
+        source = next((event for event in self._events if event.event_id == replaces_event_id), None)
+        if source is None or source.packet_key != packet.packet_key or source.phase is not ReviewPhase.INITIAL:
+            raise ReviewError("replacement must reference an initial assessment for this packet")
+        if not source.blinding_compromised:
+            raise ReviewError("only a compromised initial assessment can be replaced")
+        if any(event.replaces_event_id == replaces_event_id for event in self._events):
+            raise ReviewError("a compromised initial assessment can have only one replacement")
+        return self._append(
+            packet,
+            phase=ReviewPhase.REPLACEMENT,
+            replaces_event_id=replaces_event_id,
+            **kwargs,
+        )
 
     def append_adjudication(self, packet: ReviewerPacket, **kwargs: Any) -> ReviewEvent:
         prior = [event for event in self._events if event.packet_key == packet.packet_key]
-        independent = [event for event in prior if event.phase is ReviewPhase.INITIAL]
+        independent = self._active_initial(packet.packet_key)
         adjudicator_initial = [event for event in prior if event.phase is ReviewPhase.ADJUDICATOR_INITIAL]
         if len(independent) != 2 or len(adjudicator_initial) != 1:
             raise ReviewError("adjudication requires two locked initial reviews and the adjudicator's locked initial review")
@@ -279,6 +307,7 @@ class ReviewLedger:
         rationale: str,
         evidence_basis: str,
         phase: ReviewPhase,
+        replaces_event_id: str | None = None,
         blinding_compromised: bool = False,
         source_recognized: bool = False,
         unavoidable_exposure: tuple[str, ...] = (),
@@ -291,7 +320,7 @@ class ReviewLedger:
             raise ReviewError("evidence_basis must distinguish decision-time and retrospective evidence")
         _assert_no_protected_disclosure(rationale)
         existing = [event for event in self._events if event.packet_key == packet.packet_key]
-        if phase in {ReviewPhase.INITIAL, ReviewPhase.ADJUDICATOR_INITIAL}:
+        if phase in {ReviewPhase.INITIAL, ReviewPhase.REPLACEMENT, ReviewPhase.ADJUDICATOR_INITIAL}:
             if any(event.reviewer_pseudonym == reviewer_pseudonym for event in existing):
                 raise ReviewError("a reviewer may not submit more than one independent assessment for a packet")
             expected = 2 if phase is ReviewPhase.INITIAL else 0
@@ -302,9 +331,10 @@ class ReviewLedger:
         elif phase is ReviewPhase.ADJUDICATION:
             if any(event.phase is phase for event in existing):
                 raise ReviewError("adjudication is append-only and may be recorded only once")
-        if not _valid_action(packet.kind, action, assessable):
+        if not _valid_action(packet.kind, action, assessable, phase):
             raise ReviewError(f"invalid {packet.kind.value} assessment action: {action!r}")
         event = ReviewEvent(
+            event_id=str(uuid.uuid4()),
             packet_key=packet.packet_key,
             kind=packet.kind,
             phase=phase,
@@ -317,18 +347,14 @@ class ReviewLedger:
             source_recognized=source_recognized,
             unavoidable_exposure=tuple(unavoidable_exposure),
             timestamp_utc=self._clock(),
+            replaces_event_id=replaces_event_id,
         )
         self._events.append(event)
         return event
 
     def candidate_resolution(self, packet_key: str) -> tuple[ReviewResolution, RelevanceLabel | None]:
-        initial = [
-            event for event in self._events
-            if event.packet_key == packet_key and event.phase is ReviewPhase.INITIAL
-        ]
+        initial = self._active_initial(packet_key)
         if len(initial) != 2:
-            return ReviewResolution.UNRESOLVED, None
-        if any(event.blinding_compromised for event in initial):
             return ReviewResolution.UNRESOLVED, None
         first, second = initial
         if first.action == second.action:
@@ -342,11 +368,8 @@ class ReviewLedger:
         return ReviewResolution.RESOLVED, RelevanceLabel(adjudication.action)
 
     def decision_action(self, packet_key: str) -> tuple[ReviewResolution, Decision | None, bool]:
-        initial = [
-            event for event in self._events
-            if event.packet_key == packet_key and event.phase is ReviewPhase.INITIAL
-        ]
-        if len(initial) != 2 or any(event.blinding_compromised for event in initial):
+        initial = self._active_initial(packet_key)
+        if len(initial) != 2:
             return ReviewResolution.UNRESOLVED, None, False
         if initial[0].action == initial[1].action:
             event = initial[0]
@@ -363,6 +386,23 @@ class ReviewLedger:
             return ReviewResolution.RESOLVED, None, False
         return ReviewResolution.RESOLVED, Decision(adjudication.action), True
 
+    def _active_initial(self, packet_key: str) -> list[ReviewEvent]:
+        originals = [
+            event for event in self._events
+            if event.packet_key == packet_key and event.phase is ReviewPhase.INITIAL
+        ]
+        active: list[ReviewEvent] = []
+        for original in originals:
+            replacement = next(
+                (event for event in self._events if event.replaces_event_id == original.event_id),
+                None,
+            )
+            selected = replacement or original
+            if selected.blinding_compromised:
+                return []
+            active.append(selected)
+        return active
+
     def persist_append_only(self, path: str | Path, event: ReviewEvent) -> None:
         """Append one locked event without replacing prior reviewer judgments."""
         destination = Path(path)
@@ -375,7 +415,9 @@ class ReviewLedger:
             os.close(descriptor)
 
 
-def _valid_action(kind: ReviewKind, action: str, assessable: bool) -> bool:
+def _valid_action(kind: ReviewKind, action: str, assessable: bool, phase: ReviewPhase) -> bool:
+    if phase is ReviewPhase.ADJUDICATION and action == "unresolved" and not assessable:
+        return True
     if kind is ReviewKind.CANDIDATE_RELEVANCE:
         return action in {item.value for item in RelevanceLabel} and (action != "unknown" or not assessable)
     return (action in {item.value for item in Decision} and assessable) or (action == "unassessable" and not assessable)

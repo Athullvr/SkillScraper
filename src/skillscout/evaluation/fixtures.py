@@ -17,6 +17,12 @@ from skillscout.evaluation.protocol import DATASET_SHA256, EvaluationTask, ELIGI
 
 MANIFEST_NAME = "MANIFEST.sha256"
 FIXTURE_LOCK_NAME = "fixtures.lock.json"
+DEFAULT_INCOMPLETE_FACTS: dict[str, list[str]] = {
+    "routine-unit-test": ["existing test framework was not specified"],
+    "routine-readme-command": ["existing test command and framework were not specified"],
+    "helpful-postgres-migration": ["target column and quantitative workload were not specified"],
+    "helpful-terraform-iam": ["starting IAM policy and cross-account trust relationship were not specified"],
+}
 PROTECTED_AUDIT_TEXT = (
     "current inspected revision has no verified revision-bound external audit evidence",
     "no verified revision-bound external audit evidence",

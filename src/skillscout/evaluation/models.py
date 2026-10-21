@@ -84,11 +84,11 @@ class LookupStatus(StrEnum):
 class CandidateObservation:
     stable_id: str
     source_slug: str | None = None
-    source_url: str | None = None
     rank: int = 1
     arm_content_hash: str | None = None
     arm_revision: str | None = None
     returned_metadata: dict[str, str] = field(default_factory=dict)
+    source_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

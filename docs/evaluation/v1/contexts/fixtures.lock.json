@@ -1,0 +1,113 @@
+{
+  "schema_version": "skillscout-fixture-lock-v1",
+  "dataset_sha256": "6bcdd11f33f55193edd3808d02075a22dfa47f86333d099e8432e448010c3649",
+  "git_commit": null,
+  "fixtures": [
+    {
+      "task_id": "routine-typo",
+      "eligible_index": 1,
+      "manifest_sha256": "f04a2efdae77dcce43e0fbebf88c5cda896eb428f427326c82f57b04aee1f26a",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "routine-variable",
+      "eligible_index": 2,
+      "manifest_sha256": "47e6f9a85658620ae981a5fe71901bb22a69ac5838de6255dffddebc217e6d52",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "routine-unused-import",
+      "eligible_index": 3,
+      "manifest_sha256": "ca1b07dd4fe4214c20d8192bff6fc144ce28ff05c2ecef0f29b5368036f4e874",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "routine-unit-test",
+      "eligible_index": 4,
+      "manifest_sha256": "abb0407491965304877c0f265d4f527d8d84e2d432e3bef6b8fdb648b3ffd4d2",
+      "context_status": "incomplete_by_protocol",
+      "blocked_facts": [
+        "existing test framework was not specified"
+      ]
+    },
+    {
+      "task_id": "routine-readme-command",
+      "eligible_index": 5,
+      "manifest_sha256": "2ecd2703d5e47dff89913a9790715fbac7f5983eae0326f6fae291324bb71a89",
+      "context_status": "incomplete_by_protocol",
+      "blocked_facts": [
+        "existing test command and framework were not specified"
+      ]
+    },
+    {
+      "task_id": "helpful-fastapi-oauth",
+      "eligible_index": 6,
+      "manifest_sha256": "e8e0017f0e44342b41de4fa90716e4d911e319b1de63246a19a9a577add7cb93",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "helpful-react-accessibility",
+      "eligible_index": 7,
+      "manifest_sha256": "624ad8e70b61f1fdd9989f20411893c1f8229cd9804fd5cf8556dcdb8c02d848",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "helpful-postgres-migration",
+      "eligible_index": 8,
+      "manifest_sha256": "b1b93228e39568cd2bffd7879b548a75322d79910dc969624ed509b4e20425b0",
+      "context_status": "incomplete_by_protocol",
+      "blocked_facts": [
+        "target column and quantitative workload were not specified"
+      ]
+    },
+    {
+      "task_id": "helpful-rust-tokio-shutdown",
+      "eligible_index": 9,
+      "manifest_sha256": "93e38d0aab3c1a3ecb5565df74caab5fe82b1a7f1d89fca6dc324f2a92da71ed",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "helpful-terraform-iam",
+      "eligible_index": 10,
+      "manifest_sha256": "4c2b647bddd7a35bc9ef94b2c641798653db4fd1efff467c145472511a306269",
+      "context_status": "incomplete_by_protocol",
+      "blocked_facts": [
+        "starting IAM policy and cross-account trust relationship were not specified"
+      ]
+    },
+    {
+      "task_id": "weak-argparse-verbose",
+      "eligible_index": 11,
+      "manifest_sha256": "d2ca23fed741142918190c53b4b9743e58b23f79745fb7a70ebba78e8110b08d",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "weak-react-placeholder-avatar",
+      "eligible_index": 12,
+      "manifest_sha256": "1537a181f88ff6034d6c2e5ec997a5afbde53d8344da7009412f89f840ce514a",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "review-vendor-sso-unknown",
+      "eligible_index": 13,
+      "manifest_sha256": "88a47d82cf77e2b28fd124c4185a486bee604a4d0ed38e0e34372a078c90fec4",
+      "context_status": "ready",
+      "blocked_facts": []
+    },
+    {
+      "task_id": "review-stripe-webhook-audit",
+      "eligible_index": 14,
+      "manifest_sha256": "64e1f95f99be8b0ac1708c3789c8fe64b81c83a0b8d3793c4dbe5151de850448",
+      "context_status": "ready",
+      "blocked_facts": []
+    }
+  ]
+}

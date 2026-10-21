@@ -28,6 +28,7 @@ from skillscout.evaluation.models import (
     SlotStatus,
     TerminationStatus,
 )
+from skillscout.evaluation.crosswalk import CandidateCrosswalk
 from skillscout.evaluation.protocol import (
     ArmName,
     DATASET_SHA256,
@@ -40,7 +41,9 @@ from skillscout.evaluation.protocol import (
     build_schedule,
     ordinary_search_input,
     skillscout_input,
+    load_dataset,
 )
+from skillscout.evaluation.fixtures import materialize_opaque_contexts, verify_fixture_pack
 
 
 class Clock(Protocol):
@@ -129,6 +132,7 @@ class EvaluationRecorder:
         invocation_timeout_s: int = INVOCATION_TIMEOUT_SECONDS,
         pairing_window_s: int = PAIRING_WINDOW_SECONDS,
         lookup_budget_s: int = LOOKUP_BUDGET_SECONDS,
+        crosswalk: CandidateCrosswalk | None = None,
     ) -> None:
         self.handlers = handlers
         self.lookup = lookup
@@ -136,6 +140,7 @@ class EvaluationRecorder:
         self.invocation_timeout_s = invocation_timeout_s
         self.pairing_window_s = pairing_window_s
         self.lookup_budget_s = lookup_budget_s
+        self.crosswalk = crosswalk or CandidateCrosswalk()
         if min(invocation_timeout_s, pairing_window_s, lookup_budget_s) <= 0:
             raise ValueError("protocol deadlines must be positive")
 
@@ -159,6 +164,11 @@ class EvaluationRecorder:
             raise ValueError("opaque context paths must cover exactly the eligible tasks")
         if set(context_hashes) != {task.task_id for task in tasks}:
             raise ValueError("context hashes must cover exactly the eligible tasks")
+        canonical_tasks = load_dataset().eligible_tasks
+        if [(item.task_id, item.task_text, item.eligible_index) for item in tasks] != [
+            (item.task_id, item.task_text, item.eligible_index) for item in canonical_tasks
+        ]:
+            raise ValueError("recorder tasks must exactly match the approved eligible dataset in order")
         task_ids = {task.task_id for task in tasks}
         if not set(blocked_task_ids).issubset(task_ids):
             raise ValueError("blocked task IDs must be drawn from the eligible dataset")
@@ -211,6 +221,34 @@ class EvaluationRecorder:
                 stop_reason = pair.run_stop_reason or "review_required_after_unconfirmed_termination"
         return records
 
+    def run_with_pinned_fixtures(
+        self,
+        contexts_root: str | Path,
+        tasks: tuple[EvaluationTask, ...] | list[EvaluationTask],
+        *,
+        run_id: str = "offline-run",
+        dataset_sha256: str = DATASET_SHA256,
+        temporary_root: str | Path | None = None,
+    ) -> list[PairRecord]:
+        """Verify and materialize approved local fixtures before offline callbacks."""
+        verified = verify_fixture_pack(contexts_root, tasks, dataset_sha256=dataset_sha256)
+        hashes = {item["task_id"]: item["manifest_sha256"] for item in verified["fixtures"]}
+        blocked = {
+            item["task_id"]
+            for item in verified["fixtures"]
+            if item["context_status"] == "incomplete_by_protocol"
+        }
+        with materialize_opaque_contexts(contexts_root, tasks, temporary_root=temporary_root) as paths:
+            return self.run_offline(
+                tasks,
+                paths,
+                hashes,
+                dataset_sha256=dataset_sha256,
+                catalog_mode="offline",
+                run_id=run_id,
+                blocked_task_ids=blocked,
+            )
+
     def record_pair(
         self,
         plan: PairPlan,
@@ -234,7 +272,15 @@ class EvaluationRecorder:
             )
 
         first_arm, second_arm = plan.arm_order
-        first_record = self._invoke(first_arm, task.task_text, opaque_project_path)
+        pair_id = f"p{plan.pair_number:03d}-t{plan.task_index:02d}-r{plan.repetition}"
+        first_record = self._invoke(
+            first_arm,
+            task.task_text,
+            opaque_project_path,
+            task_id=task.task_id,
+            repetition=plan.repetition,
+            pair_id=pair_id,
+        )
         arms[first_arm] = first_record
         first_start = first_record.invocation_start_monotonic_s
         first_start_utc = first_record.invocation_start_utc
@@ -278,6 +324,9 @@ class EvaluationRecorder:
                     task.task_text,
                     opaque_project_path,
                     not_after=dispatch_deadline,
+                    task_id=task.task_id,
+                    repetition=plan.repetition,
+                    pair_id=pair_id,
                 )
                 arms[second_arm] = second_record
                 second_start = second_record.invocation_start_monotonic_s
@@ -303,7 +352,7 @@ class EvaluationRecorder:
             run_id=run_id,
             dataset_sha256=dataset_sha256,
             pair_number=plan.pair_number,
-            pair_id=f"p{plan.pair_number:03d}-t{plan.task_index:02d}-r{plan.repetition}",
+            pair_id=pair_id,
             task_id=plan.task_id,
             task_index=plan.task_index,
             repetition=plan.repetition,
@@ -336,6 +385,9 @@ class EvaluationRecorder:
         project_path: str | Path,
         *,
         not_after: float | None = None,
+        task_id: str,
+        repetition: int,
+        pair_id: str,
     ) -> ArmRecord:
         request = (
             skillscout_input(task_text, project_path)
@@ -457,7 +509,13 @@ class EvaluationRecorder:
                 slots=_empty_slots(SlotStatus.FAILED),
             )
         arm_status = ArmStatus.PARTIAL if response.partial else ArmStatus.COMPLETE
-        slots = self._slots_from_response(response)
+        slots = self._slots_from_response(
+            response,
+            arm=arm,
+            pair_id=pair_id,
+            task_id=task_id,
+            repetition=repetition,
+        )
         return ArmRecord(
             arm=arm,
             status=arm_status,
@@ -492,12 +550,30 @@ class EvaluationRecorder:
             return "invalid_attempt_count"
         return None
 
-    @staticmethod
-    def _slots_from_response(response: PrimaryResponse) -> list[CandidateSlot]:
+    def _slots_from_response(
+        self,
+        response: PrimaryResponse,
+        *,
+        arm: ArmName,
+        pair_id: str,
+        task_id: str,
+        repetition: int,
+    ) -> list[CandidateSlot]:
         slots: list[CandidateSlot] = []
         for position in range(1, SLOTS_PER_ARM + 1):
             if position <= len(response.candidates):
                 item = response.candidates[position - 1]
+                opaque_key = self.crosswalk.register(
+                    pair_id=pair_id,
+                    task_id=task_id,
+                    repetition=repetition,
+                    arm=arm,
+                    rank=item.rank,
+                    stable_id=item.stable_id,
+                    source_url=item.source_url,
+                    content_hash=item.arm_content_hash,
+                    revision=item.arm_revision,
+                )
                 slots.append(
                     CandidateSlot(
                         position=position,
@@ -507,6 +583,7 @@ class EvaluationRecorder:
                         rank=item.rank,
                         arm_content_hash=item.arm_content_hash,
                         arm_revision=item.arm_revision,
+                        opaque_candidate_key=opaque_key,
                     )
                 )
             else:

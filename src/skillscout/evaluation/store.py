@@ -65,6 +65,7 @@ def write_run(
     tasks: Iterable[EvaluationTask],
     *,
     review_events: Iterable[ReviewEvent] = (),
+    crosswalk_entries: Iterable[Any] = (),
 ) -> Path:
     """Create a new private run directory after validating all 42 pair records."""
     root = Path(directory)
@@ -90,6 +91,12 @@ def write_run(
     events = list(review_events)
     event_lines = "".join(json.dumps(item.to_dict(), ensure_ascii=False, sort_keys=True) + "\n" for item in events)
     _write_private(root / "review-events.jsonl", event_lines)
+    crosswalk = list(crosswalk_entries)
+    crosswalk_lines = "".join(
+        json.dumps(item.to_dict() if hasattr(item, "to_dict") else dict(item), ensure_ascii=False, sort_keys=True) + "\n"
+        for item in crosswalk
+    )
+    _write_private(root / "restricted-crosswalk.jsonl", crosswalk_lines)
     return root
 
 
