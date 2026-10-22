@@ -71,9 +71,12 @@ class ReviewerPacket:
     approved_context: str
     evidence: tuple[EvidenceExcerpt, ...]
     decision_options: tuple[str, ...] = ()
-    schema_version: str = "skillscout-review-packet-v1"
+    schema_version: str = "skillscout-review-packet-v2"
     evidence_status: str = "complete"
     assessment_allowed: bool = True
+    context_status: str = "ready"
+    context_reasons: tuple[str, ...] = ()
+    evidence_reasons: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -87,6 +90,9 @@ class ReviewerPacket:
             "schema_version": self.schema_version,
             "evidence_status": self.evidence_status,
             "assessment_allowed": self.assessment_allowed,
+            "context_status": self.context_status,
+            "context_reasons": list(self.context_reasons),
+            "evidence_reasons": list(self.evidence_reasons),
         }
 
 
@@ -162,6 +168,8 @@ def _assert_task_private_values_hidden(packet: ReviewerPacket, task: EvaluationT
         packet.task_text,
         packet.approved_context,
         *packet.criteria,
+        *packet.context_reasons,
+        *packet.evidence_reasons,
         *(item.content for item in packet.evidence),
     )
     for private_value in _task_private_values(task):
@@ -229,14 +237,24 @@ def _is_opaque_reference(value: str) -> bool:
 
 def _verify_packet_boundary(packet: ReviewerPacket) -> None:
     serialized = packet.to_dict()
-    if packet.schema_version != "skillscout-review-packet-v1":
+    if packet.schema_version != "skillscout-review-packet-v2":
         raise ReviewError("unsupported reviewer packet schema")
     if packet.evidence_status not in {"complete", "partial", "missing", "stale", "mismatched", "late", "unverified", "failed"}:
         raise ReviewError("unsupported packet evidence status")
     if not isinstance(packet.assessment_allowed, bool):
         raise ReviewError("packet assessability gate must be boolean")
+    if packet.context_status not in {"ready", "incomplete_by_protocol", "unverified"}:
+        raise ReviewError("unsupported packet context status")
+    if not all(isinstance(item, str) for item in packet.context_reasons):
+        raise ReviewError("packet context reasons must be text")
+    if not all(isinstance(item, str) for item in packet.evidence_reasons):
+        raise ReviewError("packet evidence reasons must be text")
+    if packet.context_status == "ready" and packet.context_reasons:
+        raise ReviewError("ready packet context cannot contain blocking reasons")
     if packet.assessment_allowed and packet.evidence_status not in {"complete", "partial"}:
         raise ReviewError("packet assessability conflicts with its evidence status")
+    if packet.assessment_allowed and packet.context_status != "ready":
+        raise ReviewError("incomplete or unverified task context cannot pass the packet assessability gate")
     if packet.assessment_allowed and any(item.truncated for item in packet.evidence):
         raise ReviewError("truncated evidence cannot pass the packet assessability gate")
 
@@ -274,6 +292,9 @@ def build_candidate_relevance_packet(
     identifiers_to_mask: Iterable[str] = (),
     evidence_status: str = "complete",
     assessment_allowed: bool = True,
+    context_status: str = "ready",
+    context_reasons: Iterable[str] = (),
+    evidence_reasons: Iterable[str] = (),
 ) -> ReviewerPacket:
     """Build a candidate-only packet with criteria but no evaluator labels."""
     packet_key = (packet_key_factory or (lambda: str(uuid.uuid4())))()
@@ -297,6 +318,9 @@ def build_candidate_relevance_packet(
         evidence=packet_evidence,
         evidence_status=evidence_status,
         assessment_allowed=assessment_allowed,
+        context_status=context_status,
+        context_reasons=tuple(context_reasons),
+        evidence_reasons=tuple(evidence_reasons),
     )
     _assert_task_private_values_hidden(packet, task)
     _verify_packet_boundary(packet)
@@ -313,6 +337,9 @@ def build_decision_conformity_packet(
     decision_criteria: Iterable[str] = (),
     evidence_status: str = "complete",
     assessment_allowed: bool = True,
+    context_status: str = "ready",
+    context_reasons: Iterable[str] = (),
+    evidence_reasons: Iterable[str] = (),
 ) -> ReviewerPacket:
     """Build a task/action assessment packet without the original action or labels."""
     packet_key = (packet_key_factory or (lambda: str(uuid.uuid4())))()
@@ -334,6 +361,9 @@ def build_decision_conformity_packet(
         decision_options=tuple(decision.value for decision in Decision),
         evidence_status=evidence_status,
         assessment_allowed=assessment_allowed,
+        context_status=context_status,
+        context_reasons=tuple(context_reasons),
+        evidence_reasons=tuple(evidence_reasons),
     )
     _assert_task_private_values_hidden(packet, task)
     _verify_packet_boundary(packet)

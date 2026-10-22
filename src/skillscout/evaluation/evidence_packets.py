@@ -8,10 +8,12 @@ evidence state; the source crosswalk is written to a separate private directory.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
 import re
+import secrets
 import stat
 import uuid
 from collections import defaultdict
@@ -22,7 +24,13 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
-from skillscout.evaluation.fixtures import has_credential_like_text, has_protected_audit_disclosure, redact_credential_like_text
+from skillscout.evaluation.fixtures import (
+    FixtureError,
+    has_credential_like_text,
+    has_protected_audit_disclosure,
+    redact_credential_like_text,
+    verify_fixture_pack,
+)
 from skillscout.evaluation.metrics import compute_metrics
 from skillscout.evaluation.models import (
     PairRecord,
@@ -30,7 +38,16 @@ from skillscout.evaluation.models import (
     LookupStatus,
     SlotStatus,
 )
-from skillscout.evaluation.protocol import DATASET_SHA256, ELIGIBLE_TASK_COUNT, PLANNED_PAIR_COUNT, ArmName, EvaluationTask, build_schedule, load_dataset
+from skillscout.evaluation.protocol import (
+    DATASET_SHA256,
+    ELIGIBLE_TASK_COUNT,
+    PLANNED_PAIR_COUNT,
+    ArmName,
+    EvaluationTask,
+    build_schedule,
+    find_repository_root,
+    load_dataset,
+)
 from skillscout.evaluation.reviews import (
     EvidenceExcerpt,
     ReviewLedger,
@@ -45,9 +62,10 @@ from skillscout.evaluation.reviews import (
 from skillscout.evaluation.validation import validate_records
 
 
-EVIDENCE_ARTIFACT_SCHEMA = "skillscout-blinded-evidence-artifact-v1"
-REVIEW_BUNDLE_SCHEMA = "skillscout-review-packet-bundle-v1"
-RESTRICTED_CROSSWALK_SCHEMA = "skillscout-review-crosswalk-v1"
+EVIDENCE_ARTIFACT_SCHEMA = "skillscout-blinded-evidence-artifact-v2"
+REVIEW_BUNDLE_SCHEMA = "skillscout-review-packet-bundle-v2"
+RESTRICTED_CROSSWALK_SCHEMA = "skillscout-review-crosswalk-v2"
+EVIDENCE_SOURCE_SCHEMA = "skillscout-restricted-evidence-source-v1"
 MAX_EXCERPTS = 8
 MAX_EXCERPT_CHARS = 2000
 MAX_TOTAL_EXCERPT_CHARS = 8000
@@ -90,6 +108,7 @@ _PROTECTED_EVIDENCE_TYPES = {"audit", "audit_finding", "safety_finding", "scanne
 _PACKET_FIELDS = {
     "packet_key", "kind", "task_text", "criteria", "approved_context", "evidence",
     "decision_options", "schema_version", "evidence_status", "assessment_allowed",
+    "context_status", "context_reasons", "evidence_reasons",
 }
 _EXCERPT_FIELDS = {
     "content", "evidence_type", "provenance", "relevance_sufficient", "identity_linked",
@@ -99,18 +118,25 @@ _BUNDLE_FIELDS = {"schema_version", "dataset_sha256", "catalog_mode", "candidate
 _ARTIFACT_FIELDS = {
     "schema_version", "opaque_candidate_id", "observed_revision_ref", "provenance",
     "retrieval_status", "status_flags", "observed_at_utc", "retrieval_started_at_utc",
-    "retrieval_completed_at_utc", "packet",
+    "retrieval_completed_at_utc", "retrieval_deadline_at_utc", "packet",
 }
 _CROSSWALK_FIELDS = {
     "schema_version", "dataset_sha256", "candidate_entries", "decision_entries",
     "decision_gates", "protected_evidence", "integrity_sha256",
 }
+_EVIDENCE_SOURCE_FIELDS = {"schema_version", "dataset_sha256", "identifier_seed", "entries", "integrity_sha256"}
+_EVIDENCE_SOURCE_ENTRY_FIELDS = {"pair_id", "arm", "rank", "attachment"}
+_EVIDENCE_SOURCE_ATTACHMENT_FIELDS = {
+    "excerpts", "protected_evidence", "provenance", "observed_at_utc", "retrieved_at_utc",
+    "retrieved_at_monotonic_s", "late", "stale", "truncated", "protected_review_required",
+}
+_EVIDENCE_SOURCE_EXCERPT_FIELDS = {"content", "evidence_type"}
 _STATUS_FLAGS = {
     item.value for item in EvidenceStatus
 } | {
     "detail_not_recorded", "retrieval_failed", "detail_unavailable", "identity_or_revision_unverified",
     "source_marked_stale", "excerpt_truncated", "protected_text_withheld", "excerpt_missing",
-    "detail_insufficient", "evidence_timing_unverified",
+    "detail_insufficient", "evidence_timing_unverified", "context_incomplete",
 }
 _CANDIDATE_CROSSWALK_ROW_FIELDS = {
     "opaque_candidate_id", "task_id", "pair_id", "repetition", "arm", "rank", "stable_id",
@@ -410,6 +436,164 @@ class EvidenceAttachment:
 
 
 @dataclass(frozen=True, slots=True)
+class EvidenceSourceArtifact:
+    """Versioned evaluator-side excerpts keyed to one planned candidate occurrence."""
+
+    schema_version: str
+    dataset_sha256: str
+    identifier_seed: str
+    attachments: Mapping[tuple[str, str, int], EvidenceAttachment]
+
+
+def _seeded_reference_factory(seed: str, purpose: str) -> Callable[[], str]:
+    key = bytes.fromhex(seed)
+    counter = 0
+
+    def next_reference() -> str:
+        nonlocal counter
+        message = f"skillscout-review-v1:{purpose}:{counter}".encode("utf-8")
+        counter += 1
+        return hmac.new(key, message, hashlib.sha256).hexdigest()[:32]
+
+    return next_reference
+
+
+def _attachment_to_dict(attachment: EvidenceAttachment) -> dict[str, Any]:
+    return {
+        "excerpts": [
+            {"content": content, "evidence_type": attachment.evidence_types[index]}
+            for index, content in enumerate(attachment.excerpts)
+        ],
+        "protected_evidence": [
+            {"content": item.content, "evidence_type": item.evidence_type}
+            for item in attachment.protected_evidence
+        ],
+        "provenance": attachment.provenance,
+        "observed_at_utc": attachment.observed_at_utc,
+        "retrieved_at_utc": attachment.retrieved_at_utc,
+        "retrieved_at_monotonic_s": attachment.retrieved_at_monotonic_s,
+        "late": attachment.late,
+        "stale": attachment.stale,
+        "truncated": attachment.truncated,
+        "protected_review_required": attachment.protected_review_required,
+    }
+
+
+def _planned_pairs_by_id(tasks: Sequence[EvaluationTask] | None = None) -> dict[str, Any]:
+    task_list = tuple(load_dataset().eligible_tasks if tasks is None else tasks)
+    return {
+        f"p{plan.pair_number:03d}-t{plan.task_index:02d}-r{plan.repetition}": plan
+        for plan in build_schedule(task_list)
+    }
+
+
+def write_evidence_source_artifact(
+    attachments: Mapping[tuple[str, str | ArmName, int], EvidenceAttachment | Mapping[str, Any]],
+    path: str | Path,
+    *,
+    identifier_seed: str | None = None,
+) -> Path:
+    """Persist bounded source excerpts in a private, integrity-checked artifact."""
+    planned = _planned_pairs_by_id()
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, int]] = set()
+    for key, raw_attachment in attachments.items():
+        if not isinstance(key, tuple) or len(key) != 3:
+            raise EvidencePacketError("evidence source occurrence key is malformed")
+        pair_id, raw_arm, rank = key
+        arm = _enum_text(raw_arm)
+        if (
+            not isinstance(pair_id, str)
+            or pair_id not in planned
+            or arm not in {item.value for item in ArmName}
+            or not isinstance(rank, int)
+            or isinstance(rank, bool)
+            or rank not in {1, 2, 3}
+        ):
+            raise EvidencePacketError("evidence source occurrence key is outside the fixed schedule")
+        occurrence = (pair_id, arm, rank)
+        if occurrence in seen:
+            raise EvidencePacketError("evidence source contains duplicate candidate occurrences")
+        seen.add(occurrence)
+        attachment = EvidenceAttachment.from_value(raw_attachment)
+        entries.append({
+            "pair_id": pair_id,
+            "arm": arm,
+            "rank": rank,
+            "attachment": _attachment_to_dict(attachment),
+        })
+    entries.sort(key=lambda item: (item["pair_id"], item["arm"], item["rank"]))
+    seed = secrets.token_hex(32) if identifier_seed is None else identifier_seed
+    if not isinstance(seed, str) or not re.fullmatch(r"[0-9a-f]{64}", seed):
+        raise EvidencePacketError("evidence source identifier seed must be 32 bytes of lowercase hexadecimal")
+    payload = {
+        "schema_version": EVIDENCE_SOURCE_SCHEMA,
+        "dataset_sha256": DATASET_SHA256,
+        "identifier_seed": seed,
+        "entries": entries,
+    }
+    serialized = _canonical(payload)
+    if len(serialized) > MAX_ARTIFACT_BYTES or has_credential_like_text(serialized.decode("utf-8")):
+        raise EvidencePacketError("evidence source is oversized or contains credential-like text")
+    destination = Path(path)
+    _ensure_private_parent(destination)
+    try:
+        _write_new_private(destination, _canonical(_with_integrity(payload)))
+    except FileExistsError as exc:
+        raise EvidencePacketError("refusing to overwrite an existing evidence source artifact") from exc
+    return destination
+
+
+def load_evidence_source_artifact(path: str | Path) -> EvidenceSourceArtifact:
+    """Load and validate the restricted input used by the offline packet builder."""
+    value = _load_json(Path(path), restricted=True)
+    if set(value) != _EVIDENCE_SOURCE_FIELDS or value.get("schema_version") != EVIDENCE_SOURCE_SCHEMA:
+        raise EvidencePacketError("evidence source schema is malformed or unsupported")
+    if value.get("dataset_sha256") != DATASET_SHA256:
+        raise EvidencePacketError("evidence source dataset hash differs from the approved cohort")
+    seed = value.get("identifier_seed")
+    if not isinstance(seed, str) or not re.fullmatch(r"[0-9a-f]{64}", seed):
+        raise EvidencePacketError("evidence source identifier seed is malformed")
+    entries = value.get("entries")
+    if not isinstance(entries, list) or len(entries) > MAX_CANDIDATE_OCCURRENCES:
+        raise EvidencePacketError("evidence source collection exceeds the fixed cohort bounds")
+    planned = _planned_pairs_by_id()
+    attachments: dict[tuple[str, str, int], EvidenceAttachment] = {}
+    for row in entries:
+        if not isinstance(row, Mapping) or set(row) != _EVIDENCE_SOURCE_ENTRY_FIELDS:
+            raise EvidencePacketError("evidence source entry is malformed")
+        pair_id, arm, rank = row.get("pair_id"), row.get("arm"), row.get("rank")
+        if (
+            not isinstance(pair_id, str)
+            or pair_id not in planned
+            or not isinstance(arm, str)
+            or arm not in {item.value for item in ArmName}
+            or not isinstance(rank, int)
+            or isinstance(rank, bool)
+            or rank not in {1, 2, 3}
+        ):
+            raise EvidencePacketError("evidence source entry is outside the fixed schedule")
+        occurrence = (pair_id, arm, rank)
+        if occurrence in attachments:
+            raise EvidencePacketError("evidence source repeats a candidate occurrence")
+        raw_attachment = row.get("attachment")
+        if not isinstance(raw_attachment, Mapping) or set(raw_attachment) != _EVIDENCE_SOURCE_ATTACHMENT_FIELDS:
+            raise EvidencePacketError("evidence source attachment schema is malformed")
+        excerpts = raw_attachment.get("excerpts")
+        protected = raw_attachment.get("protected_evidence")
+        if (
+            not isinstance(excerpts, list)
+            or any(not isinstance(item, Mapping) or set(item) != _EVIDENCE_SOURCE_EXCERPT_FIELDS for item in excerpts)
+            or not isinstance(protected, list)
+            or any(not isinstance(item, Mapping) or set(item) != _EVIDENCE_SOURCE_EXCERPT_FIELDS for item in protected)
+        ):
+            raise EvidencePacketError("evidence source excerpt schema is malformed")
+        normalized = EvidenceAttachment.from_value(raw_attachment)
+        attachments[occurrence] = normalized
+    return EvidenceSourceArtifact(EVIDENCE_SOURCE_SCHEMA, DATASET_SHA256, seed, attachments)
+
+
+@dataclass(frozen=True, slots=True)
 class ReviewerEvidenceArtifact:
     schema_version: str
     opaque_candidate_id: str
@@ -420,6 +604,7 @@ class ReviewerEvidenceArtifact:
     observed_at_utc: str | None
     retrieval_started_at_utc: str | None
     retrieval_completed_at_utc: str | None
+    retrieval_deadline_at_utc: str | None
     packet: ReviewerPacket
 
     def to_dict(self) -> dict[str, Any]:
@@ -433,6 +618,7 @@ class ReviewerEvidenceArtifact:
             "observed_at_utc": self.observed_at_utc,
             "retrieval_started_at_utc": self.retrieval_started_at_utc,
             "retrieval_completed_at_utc": self.retrieval_completed_at_utc,
+            "retrieval_deadline_at_utc": self.retrieval_deadline_at_utc,
             "packet": self.packet.to_dict(),
         }
 
@@ -608,6 +794,12 @@ def _parse_packet(value: Mapping[str, Any]) -> ReviewerPacket:
             raise TypeError
         if not isinstance(value["decision_options"], list) or not all(isinstance(item, str) for item in value["decision_options"]):
             raise TypeError
+        if value["context_status"] not in {"ready", "incomplete_by_protocol", "unverified"}:
+            raise TypeError
+        if not isinstance(value["context_reasons"], list) or not all(isinstance(item, str) for item in value["context_reasons"]):
+            raise TypeError
+        if not isinstance(value["evidence_reasons"], list) or not all(isinstance(item, str) for item in value["evidence_reasons"]):
+            raise TypeError
         for row in value["evidence"]:
             if not isinstance(row, Mapping) or set(row) != _EXCERPT_FIELDS:
                 raise TypeError
@@ -643,6 +835,9 @@ def _parse_packet(value: Mapping[str, Any]) -> ReviewerPacket:
             schema_version=value["schema_version"],
             evidence_status=value["evidence_status"],
             assessment_allowed=value["assessment_allowed"],
+            context_status=value["context_status"],
+            context_reasons=tuple(value["context_reasons"]),
+            evidence_reasons=tuple(value["evidence_reasons"]),
         )
     except (TypeError, KeyError, ValueError) as exc:
         raise EvidencePacketError("reviewer packet is malformed") from exc
@@ -728,6 +923,15 @@ class EvidencePacketPipeline:
         if errors:
             raise EvidencePacketError("pair records failed fixed-schedule validation")
         task_by_id = {task.task_id: task for task in task_list}
+        fixture_root = find_repository_root() / "docs/evaluation/v1/contexts"
+        try:
+            fixture_state = verify_fixture_pack(fixture_root, task_list)
+        except (FixtureError, OSError, ValueError) as exc:
+            raise EvidencePacketError("pinned task context readiness could not be verified") from exc
+        context_by_task = {
+            str(row["task_id"]): (str(row["context_status"]), tuple(row["blocked_facts"]))
+            for row in fixture_state["fixtures"]
+        }
         pair_by_id = {str(_get(pair, "pair_id")): pair for pair in pairs}
         attachments = attachments or {}
         source_crosswalk = _parse_candidate_crosswalk(candidate_crosswalk_entries)
@@ -848,6 +1052,7 @@ class EvidencePacketPipeline:
                     if attachment.protected_review_required or has_protected_audit_disclosure(task.project_context):
                         pair_protected.add(pair_id)
                     sufficient = _get(detail, "detail_sufficient_for_relevance") is True if detail is not None else False
+                    context_status, context_reasons = context_by_task[task_id]
                     raw_excerpt_rows = list(zip(attachment.excerpts, attachment.evidence_types or ("candidate_detail",) * len(attachment.excerpts)))
                     excerpts: list[EvidenceExcerpt] = []
                     sensitive = False
@@ -931,7 +1136,8 @@ class EvidencePacketPipeline:
                         retrieval_started = _get(detail, "start_utc")
                         retrieval_completed = _get(detail, "end_utc") or attachment.retrieved_at_utc
                         observed_at = attachment.observed_at_utc or _get(detail, "end_utc")
-                    for stamp in (retrieval_started, retrieval_completed, observed_at):
+                    retrieval_deadline = _get(pair, "lookup_deadline_utc")
+                    for stamp in (retrieval_started, retrieval_completed, observed_at, retrieval_deadline):
                         if not _utc_is_valid(stamp):
                             raise EvidencePacketError("runtime evidence timestamps are malformed")
                     observed_revision = _get(detail, "revision") if detail is not None else None
@@ -963,7 +1169,10 @@ class EvidencePacketPipeline:
                         and sufficient
                         and not truncated
                         and not sensitive
+                        and context_status == "ready"
                     )
+                    if context_status != "ready":
+                        flags.append("context_incomplete")
                     for item in excerpts:
                         if item.content:
                             pair_safe_evidence[pair_id].append(item)
@@ -987,8 +1196,11 @@ class EvidencePacketPipeline:
                         "observed_at": observed_at,
                         "retrieval_started": retrieval_started,
                         "retrieval_completed": retrieval_completed,
+                        "retrieval_deadline": retrieval_deadline,
                         "excerpts": tuple(excerpts),
                         "assessment_allowed": assessment_allowed,
+                        "context_status": context_status,
+                        "context_reasons": context_reasons,
                         "crosswalk_source": crosswalk_source,
                     }
                     artifact_occurrences[opaque].append(record)
@@ -1021,6 +1233,8 @@ class EvidencePacketPipeline:
             chosen = sorted(safe_records or records, key=lambda item: (item["status"] not in {EvidenceStatus.COMPLETE, EvidenceStatus.PARTIAL}, item["pair_id"]))[0]
             chosen_status = chosen["status"]
             assessment_allowed = chosen["assessment_allowed"]
+            context_status = chosen["context_status"]
+            context_reasons = chosen["context_reasons"]
             excerpts = list(chosen["excerpts"])
             identifiers = [item["stable_id"] for item in records]
             identifiers.extend(str(_get(item["slot"], "source_slug") or "") for item in records)
@@ -1036,6 +1250,14 @@ class EvidencePacketPipeline:
                     identifiers_to_mask=identifiers,
                     evidence_status=chosen_status.value,
                     assessment_allowed=assessment_allowed,
+                    context_status=context_status,
+                    context_reasons=context_reasons,
+                    evidence_reasons=tuple(sorted({
+                        "evidence_unavailable_for_review"
+                        if flag == "protected_text_withheld"
+                        else flag
+                        for flag in chosen["flags"]
+                    })),
                 )
             except (ValueError, TypeError) as exc:
                 raise EvidencePacketError("candidate reviewer packet failed the blinded boundary") from exc
@@ -1057,6 +1279,7 @@ class EvidencePacketPipeline:
                 observed_at_utc=chosen["observed_at"],
                 retrieval_started_at_utc=chosen["retrieval_started"],
                 retrieval_completed_at_utc=chosen["retrieval_completed"],
+                retrieval_deadline_at_utc=chosen["retrieval_deadline"],
                 packet=packet,
             )
             _verify_reviewer_artifact(artifact.to_dict(), task)
@@ -1074,6 +1297,10 @@ class EvidencePacketPipeline:
             task_id = str(_get(pair, "task_id"))
             task = task_by_id[task_id]
             scout = _arm_record(pair, ArmName.SKILLSCOUT)
+            context_status, _context_reasons = context_by_task[task_id]
+            if context_status != "ready":
+                decision_gates.append({"pair_id": pair_id, "task_id": task_id, "status": "indeterminate_context_incomplete"})
+                continue
             if pair_id in pair_protected or has_protected_audit_disclosure(task.project_context):
                 decision_gates.append({"pair_id": pair_id, "task_id": task_id, "status": "indeterminate_protected_evidence_withheld"})
                 continue
@@ -1104,6 +1331,7 @@ class EvidencePacketPipeline:
                     decision_criteria=criteria,
                     evidence_status=packet_status,
                     assessment_allowed=decision_allowed,
+                    evidence_reasons=(() if decision_allowed else ("decision_evidence_not_assessable",)),
                 )
             except (ValueError, TypeError) as exc:
                 raise EvidencePacketError("decision reviewer packet failed the blinded boundary") from exc
@@ -1127,6 +1355,97 @@ class EvidencePacketPipeline:
             protected_evidence=tuple(protected_evidence_rows),
             catalog_mode=catalog_mode,
         )
+
+
+def build_review_artifacts_from_run(
+    run_directory: str | Path,
+    *,
+    reviewer_path: str | Path,
+    restricted_crosswalk_path: str | Path,
+    evidence_source_path: str | Path | None = None,
+    approved_context_by_task: Mapping[str, str] | None = None,
+    decision_criteria_by_task: Mapping[str, Sequence[str]] | None = None,
+    decision_assessable_pairs: Iterable[str] = (),
+    protected_decision_pairs: Iterable[str] = (),
+    pipeline: EvidencePacketPipeline | None = None,
+) -> tuple[ReviewPacketBundle, Path, Path]:
+    """Load a persisted offline run and produce its separated reviewer artifacts."""
+    from skillscout.evaluation.store import RunStoreError, read_run_bundle
+
+    try:
+        run = read_run_bundle(run_directory)
+    except (OSError, RunStoreError) as exc:
+        raise EvidencePacketError("cannot load a validated offline evaluation run") from exc
+    dataset = load_dataset()
+    tasks = dataset.eligible_tasks
+    errors = validate_records(run.pairs, tasks, dataset_sha256=run.manifest.get("dataset_sha256", ""))
+    if errors:
+        raise EvidencePacketError("persisted run records failed fixed-schedule validation")
+    if approved_context_by_task is None:
+        # Empty means no additional project facts were approved for reviewer use.
+        contexts = {task.task_id: "" for task in tasks}
+    else:
+        contexts = dict(approved_context_by_task)
+    source_artifact = load_evidence_source_artifact(evidence_source_path) if evidence_source_path is not None else None
+    attachments = dict(source_artifact.attachments) if source_artifact is not None else {}
+    occupied: set[tuple[str, str, int]] = set()
+    for pair in run.pairs:
+        pair_id = str(pair.get("pair_id"))
+        arms = pair.get("arms", {})
+        if not isinstance(arms, Mapping):
+            raise EvidencePacketError("persisted run arm records are malformed")
+        for arm_name, arm_record in arms.items():
+            arm = _enum_text(arm_name)
+            if arm not in {item.value for item in ArmName} or not isinstance(arm_record, Mapping):
+                raise EvidencePacketError("persisted run arm records are malformed")
+            for slot in arm_record.get("slots", ()):
+                if not isinstance(slot, Mapping):
+                    raise EvidencePacketError("persisted run candidate slots are malformed")
+                if slot.get("status") == SlotStatus.OCCUPIED.value:
+                    rank = slot.get("rank")
+                    if not isinstance(rank, int) or isinstance(rank, bool):
+                        raise EvidencePacketError("persisted candidate occurrence has no valid rank")
+                    occupied.add((pair_id, arm, rank))
+    if not set(attachments).issubset(occupied):
+        raise EvidencePacketError("evidence source refers to a candidate occurrence absent from the run")
+    reviewer_parent = Path(reviewer_path).parent
+    restricted_parent = Path(restricted_crosswalk_path).parent
+    sensitive_directories = [Path(run_directory)]
+    if evidence_source_path is not None:
+        sensitive_directories.append(Path(evidence_source_path).parent)
+    if any(
+        _paths_overlap(output_parent, sensitive_directory)
+        for output_parent in (reviewer_parent, restricted_parent)
+        for sensitive_directory in sensitive_directories
+    ):
+        raise EvidencePacketError("reviewer artifacts must be stored outside the run and evidence-source directories")
+    packet_pipeline = pipeline
+    if packet_pipeline is None and source_artifact is not None:
+        packet_pipeline = EvidencePacketPipeline(
+            key_factory=_seeded_reference_factory(source_artifact.identifier_seed, "candidate"),
+            revision_ref_factory=_seeded_reference_factory(source_artifact.identifier_seed, "revision"),
+            decision_packet_key_factory=_seeded_reference_factory(source_artifact.identifier_seed, "decision"),
+        )
+    if packet_pipeline is None:
+        packet_pipeline = EvidencePacketPipeline()
+    bundle = packet_pipeline.build(
+        run.pairs,
+        tasks,
+        approved_context_by_task=contexts,
+        attachments=attachments,
+        candidate_crosswalk_entries=run.candidate_crosswalk,
+        decision_criteria_by_task=decision_criteria_by_task,
+        decision_assessable_pairs=decision_assessable_pairs,
+        protected_decision_pairs=protected_decision_pairs,
+        catalog_mode=run.manifest.get("catalog_mode", "offline"),
+    )
+    public_path, restricted_path = write_review_packet_artifacts(
+        bundle,
+        reviewer_path,
+        restricted_crosswalk_path,
+        catalog_mode=run.manifest.get("catalog_mode", "offline"),
+    )
+    return bundle, public_path, restricted_path
 
 
 def _deduplicate_decision_evidence(items: Iterable[EvidenceExcerpt]) -> tuple[EvidenceExcerpt, ...]:
@@ -1154,7 +1473,9 @@ def _verify_reviewer_artifact(value: Mapping[str, Any], task: EvaluationTask | N
     for flag in value["status_flags"]:
         if not isinstance(flag, str) or not re.fullmatch(r"[a-z_]{1,64}", flag):
             raise EvidencePacketError("evidence artifact flags are malformed")
-    for key in ("observed_at_utc", "retrieval_started_at_utc", "retrieval_completed_at_utc"):
+    for key in (
+        "observed_at_utc", "retrieval_started_at_utc", "retrieval_completed_at_utc", "retrieval_deadline_at_utc"
+    ):
         if not _utc_is_valid(value.get(key)):
             raise EvidencePacketError("evidence artifact timestamp is malformed")
     revision_ref = value.get("observed_revision_ref")
@@ -1179,6 +1500,8 @@ def _packet_texts(packet: ReviewerPacket) -> Iterable[str]:
     yield packet.task_text
     yield packet.approved_context
     yield from packet.criteria
+    yield from packet.context_reasons
+    yield from packet.evidence_reasons
     for item in packet.evidence:
         yield item.content
 
@@ -1243,6 +1566,12 @@ def _ensure_private_parent(path: Path) -> None:
     info = parent.lstat()
     if not stat.S_ISDIR(info.st_mode) or parent.is_symlink() or stat.S_IMODE(info.st_mode) & 0o077:
         raise EvidencePacketError("artifact parent directory must be a private real directory")
+
+
+def _paths_overlap(first: Path, second: Path) -> bool:
+    a = first.resolve(strict=False)
+    b = second.resolve(strict=False)
+    return a == b or a in b.parents or b in a.parents
 
 
 def _unlink_if_owned(path: Path, device: int, inode: int) -> None:
@@ -1468,6 +1797,7 @@ def load_review_packet_artifacts(
             observed_at_utc=row["observed_at_utc"],
             retrieval_started_at_utc=row["retrieval_started_at_utc"],
             retrieval_completed_at_utc=row["retrieval_completed_at_utc"],
+            retrieval_deadline_at_utc=row["retrieval_deadline_at_utc"],
             packet=packet,
         )
         artifacts.append(artifact)
@@ -1601,7 +1931,10 @@ def load_restricted_packet_crosswalk(
         ):
             raise EvidencePacketError("restricted decision gate row is malformed")
         if item.get("status") not in {
-            "indeterminate_protected_evidence_withheld", "indeterminate_decision_criteria_unapproved", "indeterminate_no_valid_decision"
+            "indeterminate_protected_evidence_withheld",
+            "indeterminate_decision_criteria_unapproved",
+            "indeterminate_no_valid_decision",
+            "indeterminate_context_incomplete",
         }:
             raise EvidencePacketError("restricted decision gate status is malformed")
     for item in value["protected_evidence"]:
@@ -1628,11 +1961,171 @@ def load_restricted_packet_crosswalk(
     return {key: value[key] for key in ("candidate_entries", "decision_entries", "decision_gates", "protected_evidence")}
 
 
-def persist_review_ledger(bundle: ReviewPacketBundle, ledger: ReviewLedger, packet_event_path: str | Path) -> None:
+def load_review_ledger(
+    packets: ReviewPacketBundle | LoadedReviewArtifacts,
+    packet_event_path: str | Path,
+) -> ReviewLedger:
+    """Reload and validate a private append-only event history against reviewer packets."""
+    raw = _read_private_file(Path(packet_event_path), require_private_parent=True)
+    records: list[dict[str, Any]] = []
+    allowed_fields = {
+        "event_id", "packet_key", "kind", "phase", "reviewer_pseudonym", "action",
+        "assessable", "rationale", "evidence_basis", "blinding_compromised", "source_recognized",
+        "unavoidable_exposure", "timestamp_utc", "replaces_event_id", "packet_assessment_allowed",
+    }
+    legacy_fields = allowed_fields - {"packet_assessment_allowed"}
+    try:
+        for line in raw.decode("utf-8").splitlines():
+            if not line.strip():
+                continue
+            item = json.loads(line, object_pairs_hook=_no_duplicate_keys)
+            if not isinstance(item, dict) or frozenset(item) not in {frozenset(allowed_fields), frozenset(legacy_fields)}:
+                raise EvidencePacketError("review ledger event schema is malformed")
+            if has_credential_like_text(item.get("rationale", "")) or has_protected_audit_disclosure(item.get("rationale", "")):
+                raise EvidencePacketError("review ledger contains protected rationale text")
+            records.append(item)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise EvidencePacketError("review ledger is malformed JSONL") from exc
+    try:
+        ledger = ReviewLedger.from_records(records)
+    except ValueError as exc:
+        raise EvidencePacketError("review ledger history is invalid") from exc
+    packet_by_key = {packet.packet_key: packet for packet in packets.reviewer_packets}
+    for event in ledger.events:
+        packet = packet_by_key.get(event.packet_key)
+        if packet is None or packet.kind is not event.kind or packet.assessment_allowed != event.packet_assessment_allowed:
+            raise EvidencePacketError("review ledger event does not match a packet in this bundle")
+        if not packet.assessment_allowed and (
+            event.assessable or event.action not in {"unknown", "unassessable", "unresolved"}
+        ):
+            raise EvidencePacketError("review ledger exceeds the packet evidence gate")
+    return ledger
+
+
+def _validate_packet_bundle_matches_run(
+    loaded: LoadedReviewArtifacts,
+    restricted: Mapping[str, Any],
+    pairs: Sequence[Mapping[str, Any]],
+) -> None:
+    expected: dict[tuple[str, str, int], tuple[Any, ...]] = {}
+    pair_ids: set[str] = set()
+    for pair in pairs:
+        pair_id = pair.get("pair_id")
+        task_id = pair.get("task_id")
+        repetition = pair.get("repetition")
+        if not isinstance(pair_id, str) or not isinstance(task_id, str):
+            raise EvidencePacketError("persisted pair identity is malformed")
+        pair_ids.add(pair_id)
+        for arm, arm_record in pair.get("arms", {}).items():
+            for slot in arm_record.get("slots", ()):
+                if slot.get("status") != SlotStatus.OCCUPIED.value:
+                    continue
+                occurrence = (pair_id, str(arm), slot.get("rank"))
+                expected[occurrence] = (
+                    slot.get("opaque_candidate_key"), task_id, repetition, slot.get("stable_id"),
+                    slot.get("arm_content_hash"), slot.get("arm_revision"),
+                )
+    observed: dict[tuple[str, str, int], tuple[Any, ...]] = {}
+    for entry in restricted.get("candidate_entries", ()):
+        occurrence = (entry.get("pair_id"), entry.get("arm"), entry.get("rank"))
+        observed[occurrence] = (
+            entry.get("opaque_candidate_id"), entry.get("task_id"), entry.get("repetition"),
+            entry.get("stable_id"), entry.get("arm_content_hash"), entry.get("arm_revision"),
+        )
+    if observed != expected:
+        raise EvidencePacketError("review candidate crosswalk does not match the persisted evaluation run")
+    expected_candidate_keys = {item[0] for item in expected.values()}
+    artifact_candidate_keys = {item.opaque_candidate_id for item in loaded.candidate_packets}
+    if None in expected_candidate_keys or expected_candidate_keys != artifact_candidate_keys:
+        raise EvidencePacketError("review candidate artifacts do not match the persisted run candidates")
+
+    decision_packets = {packet.packet_key for packet in loaded.decision_packets}
+    decision_entries = restricted.get("decision_entries", ())
+    mapped_pairs: set[str] = set()
+    mapped_keys: set[str] = set()
+    for entry in decision_entries:
+        pair_id = entry.get("pair_id")
+        pair = next((item for item in pairs if item.get("pair_id") == pair_id), None)
+        key = entry.get("opaque_decision_packet_key")
+        if (
+            pair is None
+            or pair.get("task_id") != entry.get("task_id")
+            or pair.get("repetition") != entry.get("repetition")
+            or entry.get("arm") != ArmName.SKILLSCOUT.value
+            or pair_id in mapped_pairs
+            or key in mapped_keys
+            or key not in decision_packets
+        ):
+            raise EvidencePacketError("review decision crosswalk does not match its packet bundle or run")
+        mapped_pairs.add(pair_id)
+        mapped_keys.add(key)
+    gated_pairs = {item.get("pair_id") for item in restricted.get("decision_gates", ())}
+    if (
+        mapped_keys != decision_packets
+        or mapped_pairs.intersection(gated_pairs)
+        or mapped_pairs.union(gated_pairs) != pair_ids
+    ):
+        raise EvidencePacketError("review decision packets and indeterminate gates do not cover the fixed schedule")
+
+
+def apply_persisted_reviews_and_derive_metrics(
+    run_directory: str | Path,
+    *,
+    reviewer_artifact_path: str | Path,
+    restricted_crosswalk_path: str | Path,
+    packet_event_path: str | Path,
+    authorization_reference: str,
+) -> dict[str, Any]:
+    """Join persisted blinded reviews to a validated run and derive protocol metrics."""
+    from skillscout.evaluation.store import RunStoreError, read_run_bundle
+
+    try:
+        run = read_run_bundle(run_directory)
+    except (OSError, RunStoreError) as exc:
+        raise EvidencePacketError("cannot load a validated offline evaluation run") from exc
+    tasks = load_dataset().eligible_tasks
+    errors = validate_records(run.pairs, tasks, dataset_sha256=run.manifest.get("dataset_sha256", ""))
+    if errors:
+        raise EvidencePacketError("persisted run records failed fixed-schedule validation")
+    loaded = load_review_packet_artifacts(reviewer_artifact_path, tasks=tasks)
+    restricted = load_restricted_packet_crosswalk(
+        restricted_crosswalk_path,
+        authorization_reference=authorization_reference,
+    )
+    _validate_packet_bundle_matches_run(loaded, restricted, run.pairs)
+    ledger = load_review_ledger(loaded, packet_event_path)
+    bundle = ReviewPacketBundle(
+        candidate_artifacts=loaded.candidate_packets,
+        decision_packets=loaded.decision_packets,
+        candidate_crosswalk=tuple(restricted["candidate_entries"]),
+        decision_crosswalk=tuple(restricted["decision_entries"]),
+        decision_gates=tuple(restricted["decision_gates"]),
+        protected_evidence=tuple(restricted["protected_evidence"]),
+        catalog_mode=loaded.catalog_mode,
+        dataset_sha256=loaded.dataset_sha256,
+    )
+    return apply_reviews_and_derive_metrics(
+        bundle,
+        run.pairs,
+        tasks,
+        ledger,
+        task_gates_approved=run.manifest.get("decision_gates_approved_by_task") or False,
+    )
+
+
+def persist_review_ledger(
+    bundle: ReviewPacketBundle | LoadedReviewArtifacts,
+    ledger: ReviewLedger,
+    packet_event_path: str | Path,
+) -> None:
     """Persist only events tied to packet keys in this bundle, retaining initial judgments."""
     allowed = {packet.packet_key for packet in bundle.reviewer_packets}
     if any(event.packet_key not in allowed for event in ledger.events):
         raise EvidencePacketError("review ledger contains an event outside this packet bundle")
+    try:
+        ReviewLedger.from_records(ledger.events)
+    except ValueError as exc:
+        raise EvidencePacketError("review ledger history is invalid") from exc
     for event in ledger.events:
         if has_credential_like_text(event.rationale) or has_protected_audit_disclosure(event.rationale):
             raise EvidencePacketError("review event contains protected text")

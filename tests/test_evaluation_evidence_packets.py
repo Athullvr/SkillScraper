@@ -15,8 +15,12 @@ from skillscout.evaluation.evidence_packets import (
     EvidencePacketPipeline,
     EvidenceStatus,
     apply_reviews_and_derive_metrics,
+    load_evidence_source_artifact,
+    load_review_ledger,
     load_restricted_packet_crosswalk,
     load_review_packet_artifacts,
+    persist_review_ledger,
+    write_evidence_source_artifact,
     write_review_packet_artifacts,
 )
 from skillscout.evaluation.fixtures import PROTECTED_AUDIT_TEXT, has_protected_audit_disclosure
@@ -33,6 +37,7 @@ from skillscout.evaluation.models import (
 from skillscout.evaluation.protocol import DATASET_SHA256, ArmName, build_schedule, load_dataset
 from skillscout.evaluation.recorder import EvaluationRecorder, InvocationHandlers, LookupObservation
 from skillscout.evaluation.reviews import ReviewError, ReviewKind, ReviewLedger
+from skillscout.evaluation.store import RunManifest, write_run
 
 
 TASKS = load_dataset().eligible_tasks
@@ -159,6 +164,7 @@ def test_versioned_allowlisted_packets_mask_identity_and_internal_runtime_fields
     assert artifact["schema_version"] == EVIDENCE_ARTIFACT_SCHEMA
     assert artifact["opaque_candidate_id"] == artifact["packet"]["packet_key"]
     assert artifact["observed_revision_ref"]
+    assert artifact["retrieval_deadline_at_utc"]
     assert artifact["retrieval_status"] == EvidenceStatus.COMPLETE.value
     for forbidden in (
         "candidate-source-1",
@@ -175,7 +181,7 @@ def test_versioned_allowlisted_packets_mask_identity_and_internal_runtime_fields
         "source-metadata-leak-marker",
     ):
         assert forbidden not in public
-    assert artifact["packet"]["schema_version"] == "skillscout-review-packet-v1"
+    assert artifact["packet"]["schema_version"] == "skillscout-review-packet-v2"
 
 
 def test_runtime_candidate_key_is_replaced_if_it_contains_source_identity(tmp_path):
@@ -226,6 +232,7 @@ def test_sensitive_and_protected_excerpt_text_is_withheld_and_never_serialized(t
         serialized = _all_packet_text(bundle)
         assert artifact.retrieval_status is EvidenceStatus.UNVERIFIED
         assert not artifact.packet.assessment_allowed
+        assert "evidence_unavailable_for_review" in artifact.packet.evidence_reasons
         assert PROTECTED_AUDIT_TEXT[0] not in serialized
         assert "protected_text_withheld" not in serialized
         assert "protected_text_withheld" in json.dumps(bundle.restricted_payload(), ensure_ascii=False)
@@ -458,6 +465,98 @@ def test_packet_storage_round_trip_integrity_determinism_and_crosswalk_boundary(
         load_restricted_packet_crosswalk(crosswalk_a, authorization_reference="offline QA review")
 
 
+def test_persisted_run_to_packets_to_reviews_to_metrics_offline(tmp_path, capsys):
+    recorder, pairs = _offline_records(tmp_path)
+    run_path = write_run(
+        tmp_path / "restricted-run",
+        RunManifest(run_id="offline-packet-integration"),
+        pairs,
+        TASKS,
+        crosswalk_entries=recorder.crosswalk.entries,
+    )
+    source_path = write_evidence_source_artifact(
+        _attachments(pairs),
+        tmp_path / "restricted-evidence" / "source.json",
+    )
+    assert len(load_evidence_source_artifact(source_path).attachments) == 84
+    from skillscout.evaluation.__main__ import main
+
+    reviewer_path = tmp_path / "reviewer-artifacts" / "packets.json"
+    crosswalk_path = tmp_path / "restricted-packet-crosswalk" / "crosswalk.json"
+    assert main([
+        "packets", "build", str(run_path),
+        "--evidence-source", str(source_path),
+        "--reviewer-output", str(reviewer_path),
+        "--restricted-output", str(crosswalk_path),
+    ]) == 0
+    build_summary = json.loads(capsys.readouterr().out)
+    assert build_summary["candidate_packets"] > 0
+    reviewer_path_2 = tmp_path / "reviewer-artifacts-repeat" / "packets.json"
+    crosswalk_path_2 = tmp_path / "restricted-packet-crosswalk-repeat" / "crosswalk.json"
+    assert main([
+        "packets", "build", str(run_path),
+        "--evidence-source", str(source_path),
+        "--reviewer-output", str(reviewer_path_2),
+        "--restricted-output", str(crosswalk_path_2),
+    ]) == 0
+    capsys.readouterr()
+    assert reviewer_path.read_bytes() == reviewer_path_2.read_bytes()
+    assert crosswalk_path.read_bytes() == crosswalk_path_2.read_bytes()
+    loaded = load_review_packet_artifacts(reviewer_path)
+    restricted = load_restricted_packet_crosswalk(crosswalk_path, authorization_reference="offline integration test")
+    incomplete_context_task_texts = {
+        task.task_text for task in TASKS
+        if task.task_id in {
+            "routine-unit-test", "routine-readme-command", "helpful-postgres-migration", "helpful-terraform-iam"
+        }
+    }
+    for artifact in loaded.candidate_packets:
+        if artifact.packet.task_text in incomplete_context_task_texts:
+            assert artifact.packet.context_status == "incomplete_by_protocol"
+            assert artifact.packet.context_reasons
+            assert "context_incomplete" in artifact.packet.evidence_reasons
+            assert not artifact.packet.assessment_allowed
+        else:
+            assert artifact.packet.context_status == "ready"
+    assert sum(item["status"] == "indeterminate_context_incomplete" for item in restricted["decision_gates"]) == 12
+    ledger = ReviewLedger()
+    for artifact in loaded.candidate_packets:
+        for reviewer in ("reviewer-a", "reviewer-b"):
+            assessable = artifact.packet.assessment_allowed
+            ledger.lock_initial(
+                artifact.packet,
+                reviewer_pseudonym=f"{reviewer}-{artifact.opaque_candidate_id}",
+                action="relevant" if assessable else "unknown",
+                assessable=assessable,
+                rationale=(
+                    "The linked excerpt supports the task criterion."
+                    if assessable else "The pinned task context omits a decision-relevant fact."
+                ),
+                evidence_basis="retrospective" if assessable else "insufficient",
+            )
+    ledger_path = tmp_path / "restricted-review-events" / "events.jsonl"
+    persist_review_ledger(loaded, ledger, ledger_path)
+    reloaded = load_review_ledger(loaded, ledger_path)
+    assert len(reloaded.events) == len(ledger.events)
+    assert main([
+        "packets", "verify", str(reviewer_path),
+    ]) == 0
+    verify_summary = json.loads(capsys.readouterr().out)
+    assert verify_summary["assessable_candidate_packets"] == 10
+    assert main([
+        "packets", "metrics", str(run_path),
+        "--reviewer-artifact", str(reviewer_path),
+        "--restricted-crosswalk", str(crosswalk_path),
+        "--review-ledger", str(ledger_path),
+        "--authorization-reference", "offline integration test",
+    ]) == 0
+    metrics = json.loads(capsys.readouterr().out)
+    assert metrics["primary"]["fixed_denominator_per_arm"] == 126
+    assert metrics["primary"]["delta"] == 0
+    assert metrics["slot_outcomes_fixed_126"]["skillscout"]["relevant"] == 30
+    assert metrics["slot_outcomes_fixed_126"]["skillscout"]["unknown"] == 12
+
+
 def test_integrity_malformed_schema_and_duplicate_keys_are_rejected(tmp_path):
     _, _, bundle = _build(tmp_path)
     path, _ = write_review_packet_artifacts(bundle, tmp_path / "r" / "packets.json", tmp_path / "x" / "crosswalk.json")
@@ -574,15 +673,15 @@ def test_review_integration_keeps_primary_estimand_and_protected_decisions_indet
     ledger = ReviewLedger()
     for artifact in bundle.candidate_artifacts:
         packet = artifact.packet
-        assert packet.assessment_allowed
+        assessable = packet.assessment_allowed
         for reviewer in ("relevance-a", "relevance-b"):
             ledger.lock_initial(
                 packet,
                 reviewer_pseudonym=f"{reviewer}-{packet.packet_key}",
-                action="relevant",
-                assessable=True,
-                rationale="the linked detail supports the criterion",
-                evidence_basis="retrospective",
+                action="relevant" if assessable else "unknown",
+                assessable=assessable,
+                rationale=("the linked detail supports the criterion" if assessable else "the fixture omits a required project fact"),
+                evidence_basis="retrospective" if assessable else "insufficient",
             )
     for packet in bundle.decision_packets:
         for reviewer in ("decision-a", "decision-b"):
@@ -628,13 +727,14 @@ def test_primary_metric_rejects_identity_mismatched_evidence_even_if_reviewed_re
     ledger = ReviewLedger()
     for artifact in bundle.candidate_artifacts:
         for reviewer in ("mismatch-a", "mismatch-b"):
+            assessable = artifact.packet.assessment_allowed
             ledger.lock_initial(
                 artifact.packet,
                 reviewer_pseudonym=f"{reviewer}-{artifact.opaque_candidate_id}",
-                action="relevant",
-                assessable=True,
-                rationale="the clean evidence supports the criterion",
-                evidence_basis="retrospective",
+                action="relevant" if assessable else "unknown",
+                assessable=assessable,
+                rationale=("the clean evidence supports the criterion" if assessable else "the fixture omits a required project fact"),
+                evidence_basis="retrospective" if assessable else "insufficient",
             )
     result = apply_reviews_and_derive_metrics(bundle, pairs, TASKS, ledger)
     assert result["metrics"]["primary"]["fixed_denominator_per_arm"] == 126
