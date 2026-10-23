@@ -27,6 +27,7 @@ from skillscout.catalog import CatalogUnavailableError
 from skillscout.config import Config
 from skillscout.evaluation.fixtures import has_credential_like_text
 from skillscout.evaluation.models import DecisionConformity
+from skillscout.evaluation.calibration_reviews import read_review_ledger, review_state
 from skillscout.evidence_explanations import explain_candidate
 from skillscout.evidence_packet import build_evidence_packet
 from skillscout.models import (
@@ -39,9 +40,11 @@ from skillscout.models import (
 )
 from skillscout.ranking import RankedSkill, rank_catalog_results, refine_rank, relevance_threshold
 
-DATASET_SCHEMA = "skillscout-calibration-dataset-v1"
-RUN_SCHEMA = "skillscout-calibration-run-v1"
-COMPARISON_SCHEMA = "skillscout-calibration-comparison-v1"
+DATASET_SCHEMA_V1 = "skillscout-calibration-dataset-v1"
+DATASET_SCHEMA_V2 = "skillscout-calibration-dataset-v2"
+DATASET_SCHEMAS = {DATASET_SCHEMA_V1, DATASET_SCHEMA_V2}
+RUN_SCHEMA = "skillscout-calibration-run-v2"
+COMPARISON_SCHEMA = "skillscout-calibration-comparison-v2"
 MAX_DATASET_BYTES = 2 * 1024 * 1024
 MAX_RUN_BYTES = 8 * 1024 * 1024
 MAX_EXAMPLES = 500
@@ -49,7 +52,7 @@ MAX_CANDIDATES = 25
 MAX_EVIDENCE_CHARS = 30_000
 EXAMPLE_ID_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}\Z")
 DECISION_VALUES = {item.value for item in Decision}
-ASSESSMENT_STATUSES = {"judgeable", "incomplete", "ambiguous"}
+ASSESSMENT_STATUSES = {"judgeable", "incomplete", "ambiguous", "pending"}
 LABEL_PROVENANCE = {"human_reviewed", "synthetic_fixture", "pending"}
 SPLITS = {"development", "held_out"}
 SEARCH_COVERAGE = {"adequate", "incomplete", "unknown", "not_needed"}
@@ -90,12 +93,39 @@ def load_calibration_dataset(path: str | Path) -> tuple[dict[str, Any], str]:
     return data, hashlib.sha256(raw).hexdigest()
 
 
-def run_calibration(dataset_path: str | Path) -> dict[str, Any]:
-    """Run fixture examples through production ranking, decision, and explanation code."""
+def run_calibration(
+    dataset_path: str | Path,
+    *,
+    reviews_path: str | Path | None = None,
+    include_held_out: bool = False,
+) -> dict[str, Any]:
+    """Run local fixtures and ledger-resolved labels through the production pipeline."""
     dataset, dataset_sha256 = load_calibration_dataset(dataset_path)
+    if any(item["label_provenance"] == "human_reviewed" for item in dataset["examples"]):
+        raise CalibrationError("human labels must come from the append-only review ledger, not inline dataset fields")
+    review_events, reviews_sha256 = read_review_ledger(
+        reviews_path,
+        dataset=dataset,
+        dataset_sha256=dataset_sha256,
+    )
+    held_out_count = sum(item["split"] == "held_out" for item in dataset["examples"])
     records: list[dict[str, Any]] = []
-    for example in dataset["examples"]:
-        records.append(_run_example(dataset, example))
+    for source_example in dataset["examples"]:
+        state = review_state(review_events, source_example["id"])
+        example = _effective_review_label(source_example, state)
+        if example["split"] == "held_out" and not include_held_out:
+            continue
+        record = _run_example(dataset, example)
+        record["review_status"] = state["status"]
+        record["adjudication_status"] = state["adjudication_status"]
+        record["reviewer_ids"] = state["reviewer_ids"]
+        record["adjudicator_id"] = state["adjudicator_id"]
+        record["review_event_ids"] = state["review_event_ids"]
+        record["review_count"] = state["review_count"]
+        resolved_event = state.get("resolved_event")
+        record["review_label_status"] = resolved_event.get("status") if resolved_event else None
+        record["review_reason"] = resolved_event.get("reason") if resolved_event else None
+        records.append(record)
 
     package_root = Path(__file__).resolve().parents[1]
     product_modules = (
@@ -119,6 +149,9 @@ def run_calibration(dataset_path: str | Path) -> dict[str, Any]:
         "skillscout_version": __version__,
         "product_source_sha256": fingerprint.hexdigest(),
         "calibration_runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "calibration_review_sha256": hashlib.sha256(
+            Path(__file__).with_name("calibration_reviews.py").read_bytes()
+        ).hexdigest(),
         "python_version": sys.version.split()[0],
         "relevance_threshold": relevance_threshold(),
         "product_modules": list(product_modules),
@@ -129,6 +162,10 @@ def run_calibration(dataset_path: str | Path) -> dict[str, Any]:
         "catalog_mode": "local_fixture_adapter",
         "network_access": "disabled_by_construction",
         "decision_clock_utc": dataset["evaluation_clock_utc"],
+        "include_held_out": bool(include_held_out),
+        "held_out_example_count": held_out_count,
+        "review_ledger_sha256": reviews_sha256,
+        "review_ledger_events": len(review_events),
     }
     result: dict[str, Any] = {
         "schema_version": RUN_SCHEMA,
@@ -136,12 +173,17 @@ def run_calibration(dataset_path: str | Path) -> dict[str, Any]:
             "id": dataset["dataset_id"],
             "version": dataset["dataset_version"],
             "sha256": dataset_sha256,
+            "schema_version": dataset["schema_version"],
             "data_kind": dataset["data_kind"],
         },
         "implementation": implementation,
         "configuration": configuration,
         "examples": records,
-        "metrics": compute_calibration_metrics(records),
+        "metrics": compute_calibration_metrics(
+            records,
+            held_out_included=include_held_out,
+            held_out_excluded_count=0 if include_held_out else held_out_count,
+        ),
     }
     result["run_id"] = hashlib.sha256(_canonical_json(result)).hexdigest()[:20]
     result["created_at_utc"] = _parse_utc(
@@ -151,16 +193,14 @@ def run_calibration(dataset_path: str | Path) -> dict[str, Any]:
     return result
 
 
-def compute_calibration_metrics(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Compute human-reviewed metrics separately from synthetic smoke metrics."""
+def compute_calibration_metrics(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    held_out_included: bool = False,
+    held_out_excluded_count: int = 0,
+) -> dict[str, Any]:
+    """Report synthetic, development, and held-out measures as separate groups."""
     rows = list(records)
-    human = [
-        item
-        for item in rows
-        if item.get("assessment_status") == "judgeable"
-        and item.get("label_provenance") == "human_reviewed"
-        and item.get("expected_decision") in DECISION_VALUES
-    ]
     synthetic = [
         item
         for item in rows
@@ -168,8 +208,24 @@ def compute_calibration_metrics(records: Sequence[Mapping[str, Any]]) -> dict[st
         and item.get("label_provenance") == "synthetic_fixture"
         and item.get("expected_decision") in DECISION_VALUES
     ]
+    human_development = [
+        item
+        for item in rows
+        if item.get("assessment_status") == "judgeable"
+        and item.get("label_provenance") == "human_reviewed"
+        and item.get("split") == "development"
+        and item.get("expected_decision") in DECISION_VALUES
+    ]
+    human_held_out = [
+        item
+        for item in rows
+        if item.get("assessment_status") == "judgeable"
+        and item.get("label_provenance") == "human_reviewed"
+        and item.get("split") == "held_out"
+        and item.get("expected_decision") in DECISION_VALUES
+    ]
     counts = Counter(str(item.get("assessment_status", "unknown")) for item in rows)
-    provenance_counts = Counter(str(item.get("label_provenance", "unknown")) for item in rows)
+    review_status_counts = Counter(str(item.get("review_status", "unreviewed")) for item in rows)
     candidate_uses = [
         candidate
         for item in rows
@@ -195,18 +251,27 @@ def compute_calibration_metrics(records: Sequence[Mapping[str, Any]]) -> dict[st
     return {
         "counts": {
             "examples": len(rows),
-            "judgeable": counts["judgeable"],
-            "incomplete": counts["incomplete"],
-            "ambiguous": counts["ambiguous"],
-            "human_reviewed_judgeable": len(human),
+            "judgeable": counts.get("judgeable", 0),
+            "incomplete": counts.get("incomplete", 0),
+            "ambiguous": counts.get("ambiguous", 0),
+            "pending": counts.get("pending", 0),
+            "human_reviewed_development_judgeable": len(human_development),
+            "human_reviewed_held_out_judgeable": len(human_held_out) if held_out_included else None,
             "synthetic_judgeable": len(synthetic),
-            "pending_review": provenance_counts["pending"],
+            "held_out_examples_excluded": held_out_excluded_count,
+            "review_statuses": dict(sorted(review_status_counts.items())),
+            "unresolved_conflicts": review_status_counts.get("conflict", 0),
+            "resolved_ambiguous_reviews": sum(item.get("review_label_status") == "ambiguous" for item in rows),
+            "resolved_unjudgeable_reviews": sum(item.get("review_label_status") == "unjudgeable" for item in rows),
         },
-        "human_reviewed": _decision_metrics(human),
-        "synthetic_smoke_test_only": _decision_metrics(synthetic),
-        "candidate_ranking": {
-            "human_reviewed": _ranking_metrics(human),
-            "synthetic_smoke_test_only": _ranking_metrics(synthetic),
+        "evaluation_groups": {
+            "synthetic_smoke_test": _metric_group(synthetic, included=True),
+            "human_reviewed_development": _metric_group(human_development, included=True),
+            "human_reviewed_held_out": (
+                _metric_group(human_held_out, included=True)
+                if held_out_included
+                else {"included": False, "example_count": None, "decision": None, "candidate_ranking": None}
+            ),
         },
         "safety_and_evidence_checks": {
             "candidate_use_count": len(candidate_uses),
@@ -226,8 +291,7 @@ def compute_calibration_metrics(records: Sequence[Mapping[str, Any]]) -> dict[st
                 "example_ids": [item["example_id"] for item in incomplete_search_no_skill],
             },
         },
-        "by_challenge_category": _group_metrics(rows, "challenge_category"),
-        "by_split": _group_metrics(rows, "split"),
+        "by_challenge_category": _group_metrics(rows, "challenge_category", held_out_included),
     }
 
 
@@ -239,6 +303,8 @@ def compare_calibration_runs(
     _validate_run_artifact(candidate)
     if baseline["dataset"]["sha256"] != candidate["dataset"]["sha256"]:
         raise CalibrationError("comparison requires runs from the same dataset SHA-256")
+    if baseline["configuration"].get("include_held_out") != candidate["configuration"].get("include_held_out"):
+        raise CalibrationError("comparison runs must use the same held-out inclusion setting")
     baseline_rows = list(baseline["examples"])
     candidate_rows = list(candidate["examples"])
     baseline_ids = [item["example_id"] for item in baseline_rows]
@@ -299,32 +365,17 @@ def compare_calibration_runs(
 
     old_metrics = baseline["metrics"]
     new_metrics = candidate["metrics"]
-    aggregate_delta = _metric_delta(
-        old_metrics["human_reviewed"]["accuracy"],
-        new_metrics["human_reviewed"]["accuracy"],
+    group_names = (
+        "synthetic_smoke_test",
+        "human_reviewed_development",
+        "human_reviewed_held_out",
     )
-    synthetic_delta = _metric_delta(
-        old_metrics["synthetic_smoke_test_only"]["accuracy"],
-        new_metrics["synthetic_smoke_test_only"]["accuracy"],
-    )
-    decision_metric_changes = {
-        "human_reviewed": _compare_decision_metrics(
-            old_metrics["human_reviewed"], new_metrics["human_reviewed"]
-        ),
-        "synthetic_smoke_test_only": _compare_decision_metrics(
-            old_metrics["synthetic_smoke_test_only"],
-            new_metrics["synthetic_smoke_test_only"],
-        ),
-    }
-    ranking_metric_changes = {
-        provenance: {
-            metric_name: _metric_delta(
-                old_metrics["candidate_ranking"][provenance][metric_name],
-                new_metrics["candidate_ranking"][provenance][metric_name],
-            )
-            for metric_name in ("top1_accuracy", "mean_reciprocal_rank", "pairwise_order_accuracy")
-        }
-        for provenance in ("human_reviewed", "synthetic_smoke_test_only")
+    group_changes = {
+        name: _compare_metric_group(
+            old_metrics["evaluation_groups"][name],
+            new_metrics["evaluation_groups"][name],
+        )
+        for name in group_names
     }
     category_deltas = _comparison_category_deltas(old_metrics, new_metrics)
 
@@ -342,6 +393,7 @@ def compare_calibration_runs(
                 {
                     "example_id": item["example_id"],
                     "challenge_category": item["challenge_category"],
+                    "evaluation_group": _evaluation_group_for_record(item),
                     "baseline_violations": sorted(prior),
                     "candidate_violations": sorted(item.get("quality_violations", [])),
                     "new_violations": introduced,
@@ -363,6 +415,7 @@ def compare_calibration_runs(
                 {
                     "example_id": item["example_id"],
                     "challenge_category": item["challenge_category"],
+                    "evaluation_group": _evaluation_group_for_record(item),
                     "expected_decision": item.get("expected_decision"),
                     "baseline_decision": old.get("observed_decision"),
                     "candidate_decision": item.get("observed_decision"),
@@ -374,12 +427,20 @@ def compare_calibration_runs(
                     ),
                 }
             )
-    if aggregate_delta["delta"] is not None:
-        aggregate_basis = "human_reviewed_accuracy"
-        aggregate_improved = aggregate_delta["delta"] > 0
-    else:
-        aggregate_basis = "synthetic_smoke_test_accuracy_only"
-        aggregate_improved = synthetic_delta["delta"] is not None and synthetic_delta["delta"] > 0
+    regression_present = bool(safety_regressions or evidence_quality_regressions)
+    regression_groups = {
+        item["evaluation_group"]
+        for item in [*safety_regressions, *evidence_quality_regressions]
+        if item.get("evaluation_group") is not None
+    }
+    accuracy_improvements = {
+        name: (
+            detail.get("accuracy", {}).get("delta") is not None
+            and detail["accuracy"]["delta"] > 0
+            and detail["accuracy"]["candidate_denominator"] > 0
+        )
+        for name, detail in group_changes.items()
+    }
 
     result: dict[str, Any] = {
         "schema_version": COMPARISON_SCHEMA,
@@ -387,21 +448,25 @@ def compare_calibration_runs(
         "baseline_run_id": baseline["run_id"],
         "candidate_run_id": candidate["run_id"],
         "metric_changes": {
-            "human_reviewed_accuracy": aggregate_delta,
-            "synthetic_smoke_test_accuracy_not_quality_evidence": synthetic_delta,
-            "decision_metrics": decision_metric_changes,
-            "candidate_ranking": ranking_metric_changes,
+            "evaluation_groups": group_changes,
         },
         "decision_changes": decision_changes,
         "category_changes": category_deltas,
         "ranking_changed_without_decision_change": ranking_only_changes,
         "safety_or_evidence_regressions": safety_regressions,
         "decision_evidence_quality_regressions": evidence_quality_regressions,
-        "aggregate_accuracy_improved_with_safety_or_evidence_regression": {
-            "aggregate_basis": aggregate_basis,
-            "accuracy_improved": aggregate_improved,
-            "safety_or_evidence_regression_present": bool(safety_regressions or evidence_quality_regressions),
-            "flag": aggregate_improved and bool(safety_regressions or evidence_quality_regressions),
+        "accuracy_improved_with_safety_or_evidence_regression": {
+            "accuracy_improvements_by_group": accuracy_improvements,
+            "safety_or_evidence_regression_present": regression_present,
+            "groups_with_improvement_and_regression": [
+                name for name, improved in accuracy_improvements.items()
+                if improved and name in regression_groups
+            ],
+            "regression_groups": sorted(regression_groups),
+            "flag": any(
+                improved and name in regression_groups
+                for name, improved in accuracy_improvements.items()
+            ),
         },
     }
     result["integrity_sha256"] = _integrity_hash(result)
@@ -418,11 +483,11 @@ def load_run_artifact(path: str | Path) -> dict[str, Any]:
 
 
 def render_run_report(run: Mapping[str, Any]) -> str:
-    """Render a concise report that separates human labels from fixture smoke tests."""
+    """Render a concise report without combining different label sources."""
     metrics = run["metrics"]
-    human = metrics["human_reviewed"]
-    synthetic = metrics["synthetic_smoke_test_only"]
     counts = metrics["counts"]
+    groups = metrics["evaluation_groups"]
+    include_held_out = run["configuration"]["include_held_out"]
     lines = [
         "# SkillScout offline calibration run",
         "",
@@ -433,62 +498,68 @@ def render_run_report(run: Mapping[str, Any]) -> str:
         f"- Relevance threshold: {run['implementation']['relevance_threshold']:.3f}",
         "- Catalog: local fixture adapter; network and optional LLM disabled",
         "",
-        "## Human-reviewed calibration metrics",
+        "## Human-reviewed development results",
         "",
-        f"Judgeable human examples: {counts['human_reviewed_judgeable']}",
-        _format_rate("Decision accuracy", human["accuracy"]),
-        _format_rate("False USE rate", human["false_use_rate"]),
-        _format_rate("False NO_SKILL_NEEDED rate", human["false_no_skill_needed_rate"]),
-        _format_rate("Unnecessary REVIEW rate", human["unnecessary_review_rate"]),
-        "",
-        "A zero denominator is reported as `n/a`, not as a passing score.",
-        "False USE/NO_SKILL_NEEDED and unnecessary REVIEW rates use predictions of that decision as the denominator; the false USE share of all judgeable examples is shown separately in JSON.",
-        "",
-        "## Candidate ranking",
-        "",
-        _format_rate("Human-reviewed top-1 ranking accuracy", metrics["candidate_ranking"]["human_reviewed"]["top1_accuracy"]),
-        _format_rate("Synthetic top-1 ranking smoke agreement", metrics["candidate_ranking"]["synthetic_smoke_test_only"]["top1_accuracy"]),
-        _format_rate("Human-reviewed pairwise order accuracy", metrics["candidate_ranking"]["human_reviewed"]["pairwise_order_accuracy"]),
-        _format_rate("Synthetic pairwise order smoke agreement", metrics["candidate_ranking"]["synthetic_smoke_test_only"]["pairwise_order_accuracy"]),
-        "",
-        "## Dataset disposition",
-        "",
-        f"- Judgeable examples: {counts['judgeable']} ({counts['human_reviewed_judgeable']} human-reviewed, {counts['synthetic_judgeable']} synthetic)",
-        f"- Incomplete: {counts['incomplete']}",
-        f"- Ambiguous: {counts['ambiguous']}",
-        f"- Pending review: {counts['pending_review']}",
-        "",
-        "## Synthetic fixture smoke test (not product-quality evidence)",
-        "",
-        _format_rate("Synthetic expected-decision agreement", synthetic["accuracy"]),
-        _format_rate("Synthetic false USE rate", synthetic["false_use_rate"]),
-        _format_rate("Synthetic false NO_SKILL_NEEDED rate", synthetic["false_no_skill_needed_rate"]),
-        _format_rate("Synthetic unnecessary REVIEW rate", synthetic["unnecessary_review_rate"]),
-        "",
-        "## Safety and evidence checks",
-        "",
-        _format_rate(
-            "Candidate USE without confirmed task capability",
-            metrics["safety_and_evidence_checks"]["candidate_uses_without_confirmed_capability"],
-        ),
-        _format_rate(
-            "Candidate USE without complete safety/compatibility evidence",
-            metrics["safety_and_evidence_checks"]["candidate_uses_without_complete_safety_or_compatibility_evidence"],
-        ),
-        f"NO_SKILL_NEEDED after incomplete search: {metrics['safety_and_evidence_checks']['no_skill_decisions_after_incomplete_search']['count']}/{metrics['safety_and_evidence_checks']['no_skill_decisions_after_incomplete_search']['denominator']}",
-        "",
-        "## By challenge category",
-        "",
-        "| Category | Human n / accuracy | Synthetic n / smoke agreement | Incomplete | Ambiguous |",
-        "|---|---:|---:|---:|---:|",
     ]
-    for category, item in metrics["by_challenge_category"].items():
-        human_metric = item["human_reviewed"]["accuracy"]
-        synthetic_metric = item["synthetic_smoke_test_only"]["accuracy"]
+    lines.extend(_format_metric_group(groups["human_reviewed_development"], "Human-reviewed development"))
+    lines.extend(["", "## Human-reviewed held-out results", ""])
+    if include_held_out:
+        lines.extend(_format_metric_group(groups["human_reviewed_held_out"], "Human-reviewed held-out"))
+        lines.append("Held-out examples were explicitly included in this report. Keep these results out of threshold and vocabulary selection.")
+    else:
         lines.append(
-            f"| {category} | {human_metric['denominator']} / {_percent(human_metric['value'])} | "
-            f"{synthetic_metric['denominator']} / {_percent(synthetic_metric['value'])} | "
-            f"{item['incomplete']} | {item['ambiguous']} |"
+            f"Excluded by default: {counts['held_out_examples_excluded']} held-out examples. "
+            "Pass `--include-held-out` only for an explicit final evaluation."
+        )
+    lines.extend(["", "## Synthetic smoke-test results (not recommendation-quality evidence)", ""])
+    lines.extend(_format_metric_group(groups["synthetic_smoke_test"], "Synthetic smoke test"))
+    lines.extend(
+        [
+            "",
+            "## Dataset disposition",
+            "",
+            f"- Evaluated examples: {counts['examples']}",
+            f"- Judgeable: {counts['judgeable']}",
+            f"- Incomplete: {counts['incomplete']}",
+            f"- Ambiguous: {counts['ambiguous']}",
+            f"- Pending: {counts['pending']}",
+            f"- Human-reviewed ambiguous: {counts['resolved_ambiguous_reviews']}",
+            f"- Human-reviewed unjudgeable: {counts['resolved_unjudgeable_reviews']}",
+            f"- Unresolved review conflicts: {counts['unresolved_conflicts']}",
+            f"- Review states: `{json.dumps(counts['review_statuses'], sort_keys=True)}`",
+            "",
+            "A zero denominator is `n/a`, not a passing score. Accuracy and per-decision rates show explicit denominators in the JSON. False USE rate uses predicted USE decisions as its denominator; false USE share of all judgeable examples is separately recorded. Every group warns when it has fewer than 30 judgeable examples.",
+            "",
+            "## Safety and evidence checks",
+            "",
+            _format_rate(
+                "Candidate USE without confirmed task capability",
+                metrics["safety_and_evidence_checks"]["candidate_uses_without_confirmed_capability"],
+            ),
+            _format_rate(
+                "Candidate USE without complete safety/compatibility evidence",
+                metrics["safety_and_evidence_checks"]["candidate_uses_without_complete_safety_or_compatibility_evidence"],
+            ),
+            f"NO_SKILL_NEEDED after incomplete search: {metrics['safety_and_evidence_checks']['no_skill_decisions_after_incomplete_search']['count']}/{metrics['safety_and_evidence_checks']['no_skill_decisions_after_incomplete_search']['denominator']}",
+            "",
+            "## By challenge category",
+            "",
+            "| Category | Human development n / accuracy | Human held-out n / accuracy | Synthetic n / agreement | Incomplete | Ambiguous | Pending |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for category, item in metrics["by_challenge_category"].items():
+        development = item["human_reviewed_development"]["decision"]["accuracy"]
+        synthetic = item["synthetic_smoke_test"]["decision"]["accuracy"]
+        if include_held_out:
+            held_out = item["human_reviewed_held_out"]["decision"]["accuracy"]
+            held_text = f"{held_out['denominator']} / {_percent(held_out['value'])}"
+        else:
+            held_text = "excluded"
+        lines.append(
+            f"| {category} | {development['denominator']} / {_percent(development['value'])} | "
+            f"{held_text} | {synthetic['denominator']} / {_percent(synthetic['value'])} | "
+            f"{item['incomplete']} | {item['ambiguous']} | {item['pending']} |"
         )
     mismatches = [
         item
@@ -523,34 +594,41 @@ def render_comparison_report(comparison: Mapping[str, Any]) -> str:
         f"- Baseline run: `{comparison['baseline_run_id']}`",
         f"- Candidate run: `{comparison['candidate_run_id']}`",
         "",
-        "## Aggregate metric change",
-        "",
-        _format_delta("Human-reviewed decision accuracy", delta["human_reviewed_accuracy"]),
-        _format_delta(
-            "Synthetic smoke agreement (not quality evidence)",
-            delta["synthetic_smoke_test_accuracy_not_quality_evidence"],
-        ),
-        _format_delta("Human false USE rate", delta["decision_metrics"]["human_reviewed"]["false_use_rate"]),
-        _format_delta(
-            "Human false NO_SKILL_NEEDED rate",
-            delta["decision_metrics"]["human_reviewed"]["false_no_skill_needed_rate"],
-        ),
-        _format_delta(
-            "Human unnecessary REVIEW rate",
-            delta["decision_metrics"]["human_reviewed"]["unnecessary_review_rate"],
-        ),
-        _format_delta(
-            "Human top-1 ranking accuracy",
-            delta["candidate_ranking"]["human_reviewed"]["top1_accuracy"],
-        ),
-        _format_delta(
-            "Synthetic top-1 ranking smoke agreement",
-            delta["candidate_ranking"]["synthetic_smoke_test_only"]["top1_accuracy"],
-        ),
-        "",
-        "## Decision changes",
+        "## Metric changes by label source",
         "",
     ]
+    for name, label in (
+        ("human_reviewed_development", "Human-reviewed development"),
+        ("human_reviewed_held_out", "Human-reviewed held-out"),
+        ("synthetic_smoke_test", "Synthetic smoke test (not quality evidence)"),
+    ):
+        group = delta["evaluation_groups"][name]
+        lines.extend([f"### {label}", ""])
+        if not group["included"]:
+            lines.append("Held-out metrics were excluded from both runs.")
+            lines.append("")
+            continue
+        lines.extend(
+            [
+                _format_delta("Decision accuracy", group["accuracy"]),
+                _format_delta("False USE rate", group["decision"]["false_use_rate"]),
+                _format_delta("False NO_SKILL_NEEDED rate", group["decision"]["false_no_skill_needed_rate"]),
+                _format_delta("Unnecessary REVIEW rate", group["decision"]["unnecessary_review_rate"]),
+                _format_delta("Top-1 candidate ranking", group["candidate_ranking"]["top1_accuracy"]),
+                f"- Small-sample warning: {group['small_sample_warning_baseline']} baseline / {group['small_sample_warning_candidate']} candidate",
+                "",
+            ]
+        )
+        for decision, measures in group["decision"]["per_decision_precision_recall"].items():
+            lines.append(
+                f"- {decision}: precision Δ {_format_delta_cell(measures['precision'])}; "
+                f"recall Δ {_format_delta_cell(measures['recall'])}"
+            )
+        lines.append("")
+    lines.extend([
+        "## Decision changes",
+        "",
+    ])
     if comparison["decision_changes"]:
         for item in comparison["decision_changes"]:
             lines.append(
@@ -562,16 +640,20 @@ def render_comparison_report(comparison: Mapping[str, Any]) -> str:
         lines.append("No final decisions changed.")
     lines.extend(["", "## Category changes", ""])
     if comparison["category_changes"]:
-        lines.append("| Category | Human accuracy Δ | False USE Δ | False NO Δ | REVIEW Δ | Synthetic smoke Δ |")
-        lines.append("|---|---:|---:|---:|---:|---:|")
+        lines.append("Category-level metric changes are kept within their source group in the JSON artifact.")
         for category, item in comparison["category_changes"].items():
-            lines.append(
-                f"| {category} | {_format_delta_cell(item['human_accuracy_delta'])} | "
-                f"{_format_delta_cell(item['human_false_use_rate_delta'])} | "
-                f"{_format_delta_cell(item['human_false_no_skill_needed_rate_delta'])} | "
-                f"{_format_delta_cell(item['human_unnecessary_review_rate_delta'])} | "
-                f"{_format_delta_cell(item['synthetic_accuracy_delta_not_quality_evidence'])} |"
-            )
+            lines.append(f"- `{category}`")
+            for group_name, group in item["evaluation_groups"].items():
+                if not group["included"]:
+                    lines.append(f"  - {group_name}: held-out metrics excluded")
+                else:
+                    lines.append(
+                        f"  - {group_name}: accuracy {_format_delta_cell(group['accuracy'])}; "
+                        f"false USE {_format_delta_cell(group['decision']['false_use_rate'])}; "
+                        f"false NO {_format_delta_cell(group['decision']['false_no_skill_needed_rate'])}; "
+                        f"unnecessary REVIEW {_format_delta_cell(group['decision']['unnecessary_review_rate'])}; "
+                        f"n={group['baseline_example_count']} → {group['candidate_example_count']}"
+                    )
     else:
         lines.append("No challenge categories were present.")
     lines.extend(["", "## Ranking-only changes", ""])
@@ -600,12 +682,12 @@ def render_comparison_report(comparison: Mapping[str, Any]) -> str:
             )
     else:
         lines.append("No new false USE or NO_SKILL_NEEDED-after-incomplete-search regression was detected.")
-    summary = comparison["aggregate_accuracy_improved_with_safety_or_evidence_regression"]
+    summary = comparison["accuracy_improved_with_safety_or_evidence_regression"]
     lines.extend(
         [
             "",
-            "Aggregate improvement with safety/evidence regression: "
-            f"**{summary['flag']}** (basis: {summary['aggregate_basis']}).",
+            "Any source-group accuracy improvement paired with a safety/evidence regression: "
+            f"**{summary['flag']}** (groups: {', '.join(summary['groups_with_improvement_and_regression']) or 'none'}).",
             "",
         ]
     )
@@ -836,6 +918,52 @@ def _run_example(dataset: Mapping[str, Any], example: Mapping[str, Any]) -> dict
     return record
 
 
+def _effective_review_label(
+    source_example: Mapping[str, Any], state: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Apply a resolved ledger label to a copy while retaining the source template."""
+    example = dict(source_example)
+    event = state.get("resolved_event")
+    if event is None:
+        return example
+    if event["status"] == "judgeable":
+        example.update(
+            {
+                "assessment_status": "judgeable",
+                "label_provenance": "human_reviewed",
+                "reviewer": ",".join(state["reviewer_ids"]),
+                "expected_decision": event["decision"],
+                "expected_candidate_order": event["candidate_order"],
+                "rationale": event["rationale"],
+                "evidence_basis": list(event["evidence_basis"]),
+            }
+        )
+    else:
+        example.update(
+            {
+                "assessment_status": "ambiguous" if event["status"] == "ambiguous" else "incomplete",
+                "label_provenance": "pending",
+                "reviewer": None,
+                "expected_decision": None,
+                "expected_candidate_order": None,
+                "rationale": event.get("rationale") or event.get("reason", ""),
+                "evidence_basis": list(event.get("evidence_basis", [])),
+            }
+        )
+    return example
+
+
+def _metric_group(rows: Sequence[Mapping[str, Any]], *, included: bool) -> dict[str, Any]:
+    return {
+        "included": included,
+        "example_count": len(rows),
+        "judgeable_examples": len(rows),
+        "small_sample_warning": len(rows) < 30,
+        "decision": _decision_metrics(rows),
+        "candidate_ranking": _ranking_metrics(rows),
+    }
+
+
 def _validate_dataset(data: Mapping[str, Any]) -> None:
     required = {
         "schema_version",
@@ -848,9 +976,10 @@ def _validate_dataset(data: Mapping[str, Any]) -> None:
         "examples",
     }
     if set(data) != required:
-        raise CalibrationError("calibration dataset fields do not match schema v1")
-    if data["schema_version"] != DATASET_SCHEMA:
+        raise CalibrationError("calibration dataset fields do not match the supported schema")
+    if not isinstance(data["schema_version"], str) or data["schema_version"] not in DATASET_SCHEMAS:
         raise CalibrationError("unsupported calibration dataset schema_version")
+    schema_version = data["schema_version"]
     _require_text(data, "dataset_id", 100)
     _require_text(data, "dataset_version", 40)
     _require_text(data, "description", 1000)
@@ -859,22 +988,37 @@ def _validate_dataset(data: Mapping[str, Any]) -> None:
         {"synthetic_smoke_test_only", "human_reviewed", "mixed"},
         "data_kind",
     )
+    if schema_version == DATASET_SCHEMA_V2 and data["data_kind"] != "human_reviewed":
+        raise CalibrationError("dataset v2 is reserved for pending human-review examples")
     if not _is_int(data["candidate_limit"]) or not 1 <= data["candidate_limit"] <= 5:
         raise CalibrationError("candidate_limit must be an integer from 1 to 5")
     _parse_utc(data["evaluation_clock_utc"], "evaluation_clock_utc")
     examples = data["examples"]
-    if not isinstance(examples, list) or not examples or len(examples) > MAX_EXAMPLES:
-        raise CalibrationError(f"examples must be a non-empty list of at most {MAX_EXAMPLES} items")
+    minimum_examples = 0 if schema_version == DATASET_SCHEMA_V2 else 1
+    if not isinstance(examples, list) or len(examples) < minimum_examples or len(examples) > MAX_EXAMPLES:
+        qualifier = "list" if minimum_examples == 0 else "non-empty list"
+        raise CalibrationError(f"examples must be a {qualifier} of at most {MAX_EXAMPLES} items")
     identifiers: set[str] = set()
+    task_by_split: dict[str, set[str]] = {"development": set(), "held_out": set()}
     for index, example in enumerate(examples):
         _validate_example(example, data, index)
         if example["id"] in identifiers:
             raise CalibrationError(f"duplicate calibration example ID: {example['id']}")
         identifiers.add(example["id"])
-        if data["data_kind"] == "human_reviewed" and example["label_provenance"] not in {"human_reviewed", "pending"}:
-            raise CalibrationError("human_reviewed datasets cannot include synthetic decision labels")
+        if data["data_kind"] == "human_reviewed" and example["label_provenance"] != "pending":
+            raise CalibrationError("human-review datasets must keep labels pending in the dataset; use the append-only review ledger")
         if data["data_kind"] == "synthetic_smoke_test_only" and example["label_provenance"] == "human_reviewed":
             raise CalibrationError("synthetic-only datasets cannot contain human-reviewed labels")
+        if schema_version == DATASET_SCHEMA_V2 and (
+            example["assessment_status"] != "pending" or example["label_provenance"] != "pending"
+        ):
+            raise CalibrationError("dataset v2 examples must remain pending until reviewed in the ledger")
+        if schema_version == DATASET_SCHEMA_V2:
+            normalized_task = " ".join(example["task"].casefold().split())
+            other_split = "held_out" if example["split"] == "development" else "development"
+            if normalized_task in task_by_split[other_split]:
+                raise CalibrationError("the same normalized task cannot appear in development and held_out splits")
+            task_by_split[example["split"]].add(normalized_task)
 
 
 def _validate_example(value: Any, dataset: Mapping[str, Any], index: int) -> None:
@@ -894,7 +1038,7 @@ def _validate_example(value: Any, dataset: Mapping[str, Any], index: int) -> Non
         "search",
     }
     if not isinstance(value, dict) or set(value) != required:
-        raise CalibrationError(f"example[{index}] fields do not match schema v1")
+        raise CalibrationError(f"example[{index}] fields do not match the supported dataset schema")
     identifier = value["id"]
     if not isinstance(identifier, str) or not EXAMPLE_ID_RE.fullmatch(identifier):
         raise CalibrationError(f"example[{index}] has an invalid stable ID")
@@ -906,7 +1050,13 @@ def _validate_example(value: Any, dataset: Mapping[str, Any], index: int) -> Non
     expected = value["expected_decision"]
     if expected is not None and (not isinstance(expected, str) or expected not in DECISION_VALUES):
         raise CalibrationError(f"example {identifier} has an invalid expected_decision")
-    if value["assessment_status"] == "judgeable":
+    is_pending = value["assessment_status"] == "pending" and value["label_provenance"] == "pending"
+    if is_pending:
+        if dataset["schema_version"] != DATASET_SCHEMA_V2:
+            raise CalibrationError(f"pending example {identifier} is only supported in dataset v2")
+        if expected is not None or value["reviewer"] is not None:
+            raise CalibrationError(f"pending example {identifier} cannot contain a resolved label or reviewer")
+    elif value["assessment_status"] == "judgeable":
         if expected is None or value["label_provenance"] not in {"human_reviewed", "synthetic_fixture"}:
             raise CalibrationError(f"judgeable example {identifier} needs an explicit sourced decision")
     elif expected is not None or value["label_provenance"] != "pending":
@@ -917,8 +1067,12 @@ def _validate_example(value: Any, dataset: Mapping[str, Any], index: int) -> Non
         _require_text(value, "reviewer", 120)
     elif value["reviewer"] is not None:
         raise CalibrationError(f"example {identifier} cannot name a reviewer for a non-human label")
-    _require_text(value, "rationale", 1000)
-    if not isinstance(value["evidence_basis"], list) or not value["evidence_basis"]:
+    if is_pending:
+        if not isinstance(value["rationale"], str) or len(value["rationale"]) > 1000:
+            raise CalibrationError(f"pending example {identifier} rationale must be empty or bounded text")
+    else:
+        _require_text(value, "rationale", 1000)
+    if not isinstance(value["evidence_basis"], list) or (not is_pending and not value["evidence_basis"]):
         raise CalibrationError(f"example {identifier} needs explicit evidence_basis entries")
     if len(value["evidence_basis"]) > 20 or any(
         not isinstance(item, str) or not item.strip() or len(item) > 500
@@ -1058,6 +1212,43 @@ def _run_artifact_validity(example: Mapping[str, Any]) -> None:
         raise CalibrationError("recorded incomplete or ambiguous example has a resolved label")
     if not isinstance(example.get("trace"), dict) or not isinstance(example.get("example_id"), str):
         raise CalibrationError("recorded run contains a malformed example trace")
+    _require_enum(
+        example.get("review_status"),
+        {"unreviewed", "awaiting_independent_review", "consensus", "conflict", "adjudicated"},
+        "recorded human-review status",
+    )
+    _require_enum(
+        example.get("adjudication_status"),
+        {"not_started", "awaiting_second_review", "not_needed", "required", "resolved"},
+        "recorded adjudication status",
+    )
+    if not isinstance(example.get("reviewer_ids"), list) or any(
+        not isinstance(item, str) for item in example["reviewer_ids"]
+    ):
+        raise CalibrationError("recorded run contains invalid reviewer identities")
+    if not isinstance(example.get("review_event_ids"), list) or any(
+        not isinstance(item, str) for item in example["review_event_ids"]
+    ):
+        raise CalibrationError("recorded run contains invalid review event references")
+    if example.get("adjudicator_id") is not None and not isinstance(example.get("adjudicator_id"), str):
+        raise CalibrationError("recorded run contains an invalid adjudicator identity")
+    if not _is_int(example.get("review_count")) or example["review_count"] < 0:
+        raise CalibrationError("recorded run contains an invalid review count")
+    review_label_status = example.get("review_label_status")
+    if review_label_status is not None and (
+        not isinstance(review_label_status, str)
+        or review_label_status not in {"judgeable", "ambiguous", "unjudgeable"}
+    ):
+        raise CalibrationError("recorded run contains an invalid resolved review label status")
+    review_reason = example.get("review_reason")
+    if review_reason is not None and (not isinstance(review_reason, str) or len(review_reason) > 1000):
+        raise CalibrationError("recorded run contains an invalid review reason")
+    if example["label_provenance"] == "human_reviewed" and (
+        review_label_status != "judgeable"
+        or example["review_status"] not in {"consensus", "adjudicated"}
+        or not example["review_event_ids"]
+    ):
+        raise CalibrationError("human-reviewed run labels must have a resolved, auditable ledger history")
     if not isinstance(example.get("challenge_category"), str) or not isinstance(example.get("split"), str):
         raise CalibrationError("recorded run contains invalid example grouping fields")
     _require_enum(example["split"], SPLITS, "recorded split")
@@ -1142,20 +1333,29 @@ def _validate_run_artifact(run: Mapping[str, Any]) -> None:
     dataset = run.get("dataset")
     if (
         not isinstance(dataset, dict)
-        or set(dataset) != {"id", "version", "sha256", "data_kind"}
+        or set(dataset) != {"id", "version", "sha256", "schema_version", "data_kind"}
         or not isinstance(dataset.get("sha256"), str)
         or not re.fullmatch(r"[0-9a-f]{64}", dataset["sha256"])
         or not isinstance(dataset.get("id"), str)
         or not isinstance(dataset.get("version"), str)
+        or not isinstance(dataset.get("schema_version"), str)
+        or dataset.get("schema_version") not in DATASET_SCHEMAS
         or not isinstance(dataset.get("data_kind"), str)
         or dataset["data_kind"] not in {"synthetic_smoke_test_only", "human_reviewed", "mixed"}
     ):
         raise CalibrationError("calibration run has no dataset identity")
+    if dataset["schema_version"] == DATASET_SCHEMA_V2 and dataset["data_kind"] != "human_reviewed":
+        raise CalibrationError("dataset v2 run metadata must identify a human-review dataset")
     if not isinstance(run.get("implementation"), dict) or not isinstance(run.get("configuration"), dict):
         raise CalibrationError("calibration run has malformed implementation or configuration metadata")
+    configuration = run["configuration"]
+    if type(configuration.get("include_held_out")) is not bool:
+        raise CalibrationError("calibration run has invalid held-out inclusion metadata")
+    if not _is_int(configuration.get("held_out_example_count")) or configuration["held_out_example_count"] < 0:
+        raise CalibrationError("calibration run has invalid held-out sample count")
     examples = run.get("examples")
-    if not isinstance(examples, list) or not examples:
-        raise CalibrationError("calibration run must contain example records")
+    if not isinstance(examples, list):
+        raise CalibrationError("calibration run example records must be a list")
     ids: list[str] = []
     for example in examples:
         if not isinstance(example, dict):
@@ -1164,6 +1364,16 @@ def _validate_run_artifact(run: Mapping[str, Any]) -> None:
         ids.append(example["example_id"])
     if len(ids) != len(set(ids)):
         raise CalibrationError("calibration run contains duplicate example IDs")
+    if dataset["schema_version"] == DATASET_SCHEMA_V2 and any(
+        item["label_provenance"] == "synthetic_fixture" for item in examples
+    ):
+        raise CalibrationError("human-review v2 runs cannot classify a synthetic example as human data")
+    if dataset["data_kind"] == "synthetic_smoke_test_only" and any(
+        item["label_provenance"] == "human_reviewed" for item in examples
+    ):
+        raise CalibrationError("synthetic-only runs cannot contain human-reviewed labels")
+    if not configuration["include_held_out"] and any(item["split"] == "held_out" for item in examples):
+        raise CalibrationError("run includes held-out examples without explicit inclusion")
     run_id_material = {
         key: value
         for key, value in run.items()
@@ -1181,7 +1391,14 @@ def _validate_run_artifact(run: Mapping[str, Any]) -> None:
         raise CalibrationError("calibration run timestamp does not match its frozen decision clock")
     if run.get("integrity_sha256") != _integrity_hash(run):
         raise CalibrationError("calibration run integrity SHA-256 mismatch")
-    if run.get("metrics") != compute_calibration_metrics(examples):
+    expected_metrics = compute_calibration_metrics(
+        examples,
+        held_out_included=configuration["include_held_out"],
+        held_out_excluded_count=(
+            0 if configuration["include_held_out"] else configuration["held_out_example_count"]
+        ),
+    )
+    if run.get("metrics") != expected_metrics:
         raise CalibrationError("calibration run metrics do not match its recorded example traces")
 
 
@@ -1441,33 +1658,51 @@ def _ranking_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _group_metrics(rows: Sequence[Mapping[str, Any]], field: str) -> dict[str, Any]:
+def _group_metrics(
+    rows: Sequence[Mapping[str, Any]], field: str, held_out_included: bool
+) -> dict[str, Any]:
     groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for item in rows:
         groups[str(item.get(field, "unknown"))].append(item)
     output: dict[str, Any] = {}
     for key in sorted(groups):
         members = groups[key]
-        human = [
-            item for item in members
-            if item.get("assessment_status") == "judgeable"
-            and item.get("label_provenance") == "human_reviewed"
-            and item.get("expected_decision") in DECISION_VALUES
-        ]
         synthetic = [
             item for item in members
             if item.get("assessment_status") == "judgeable"
             and item.get("label_provenance") == "synthetic_fixture"
             and item.get("expected_decision") in DECISION_VALUES
         ]
+        human_development = [
+            item for item in members
+            if item.get("assessment_status") == "judgeable"
+            and item.get("label_provenance") == "human_reviewed"
+            and item.get("split") == "development"
+            and item.get("expected_decision") in DECISION_VALUES
+        ]
+        human_held_out = [
+            item for item in members
+            if item.get("assessment_status") == "judgeable"
+            and item.get("label_provenance") == "human_reviewed"
+            and item.get("split") == "held_out"
+            and item.get("expected_decision") in DECISION_VALUES
+        ]
         statuses = Counter(str(item.get("assessment_status", "unknown")) for item in members)
         output[key] = {
             "examples": len(members),
-            "judgeable": statuses["judgeable"],
-            "incomplete": statuses["incomplete"],
-            "ambiguous": statuses["ambiguous"],
-            "human_reviewed": _decision_metrics(human),
-            "synthetic_smoke_test_only": _decision_metrics(synthetic),
+            "judgeable": statuses.get("judgeable", 0),
+            "incomplete": statuses.get("incomplete", 0),
+            "ambiguous": statuses.get("ambiguous", 0),
+            "pending": statuses.get("pending", 0),
+            "resolved_ambiguous_reviews": sum(item.get("review_label_status") == "ambiguous" for item in members),
+            "resolved_unjudgeable_reviews": sum(item.get("review_label_status") == "unjudgeable" for item in members),
+            "synthetic_smoke_test": _metric_group(synthetic, included=True),
+            "human_reviewed_development": _metric_group(human_development, included=True),
+            "human_reviewed_held_out": (
+                _metric_group(human_held_out, included=True)
+                if held_out_included
+                else {"included": False, "example_count": None, "decision": None, "candidate_ranking": None}
+            ),
         }
     return output
 
@@ -1482,7 +1717,45 @@ def _compare_decision_metrics(
         "unnecessary_review_rate",
         "false_use_share_of_judgeable_examples",
     )
-    return {name: _metric_delta(before[name], after[name]) for name in names}
+    result = {name: _metric_delta(before[name], after[name]) for name in names}
+    result["per_decision_precision_recall"] = {
+        decision: {
+            metric: _metric_delta(
+                before["per_decision"][decision][metric],
+                after["per_decision"][decision][metric],
+            )
+            for metric in ("precision", "recall")
+        }
+        for decision in sorted(DECISION_VALUES)
+    }
+    return result
+
+
+def _compare_metric_group(before: Mapping[str, Any], after: Mapping[str, Any]) -> dict[str, Any]:
+    included = before.get("included") is True and after.get("included") is True
+    if not included:
+        return {
+            "included": False,
+            "baseline_example_count": before.get("example_count"),
+            "candidate_example_count": after.get("example_count"),
+        }
+    old_decision = before["decision"]
+    new_decision = after["decision"]
+    old_ranking = before["candidate_ranking"]
+    new_ranking = after["candidate_ranking"]
+    return {
+        "included": True,
+        "baseline_example_count": before["example_count"],
+        "candidate_example_count": after["example_count"],
+        "small_sample_warning_baseline": before["small_sample_warning"],
+        "small_sample_warning_candidate": after["small_sample_warning"],
+        "accuracy": _metric_delta(old_decision["accuracy"], new_decision["accuracy"]),
+        "decision": _compare_decision_metrics(old_decision, new_decision),
+        "candidate_ranking": {
+            metric_name: _metric_delta(old_ranking[metric_name], new_ranking[metric_name])
+            for metric_name in ("top1_accuracy", "mean_reciprocal_rank", "pairwise_order_accuracy")
+        },
+    }
 
 
 def _comparison_category_deltas(old: Mapping[str, Any], new: Mapping[str, Any]) -> dict[str, Any]:
@@ -1492,19 +1765,23 @@ def _comparison_category_deltas(old: Mapping[str, Any], new: Mapping[str, Any]) 
     for category in sorted(set(old_categories) | set(new_categories)):
         before = old_categories.get(category, {})
         after = new_categories.get(category, {})
-        old_human = before.get("human_reviewed", {})
-        new_human = after.get("human_reviewed", {})
+        evaluation_groups = {}
+        for group_name in (
+            "synthetic_smoke_test",
+            "human_reviewed_development",
+            "human_reviewed_held_out",
+        ):
+            old_group = before.get(group_name, {})
+            new_group = after.get(group_name, {})
+            evaluation_groups[group_name] = _compare_metric_group(old_group, new_group)
         output[category] = {
-            "human_accuracy_delta": _metric_delta(old_human.get("accuracy", {}), new_human.get("accuracy", {})),
-            "human_false_use_rate_delta": _metric_delta(old_human.get("false_use_rate", {}), new_human.get("false_use_rate", {})),
-            "human_false_no_skill_needed_rate_delta": _metric_delta(old_human.get("false_no_skill_needed_rate", {}), new_human.get("false_no_skill_needed_rate", {})),
-            "human_unnecessary_review_rate_delta": _metric_delta(old_human.get("unnecessary_review_rate", {}), new_human.get("unnecessary_review_rate", {})),
-            "synthetic_accuracy_delta_not_quality_evidence": _metric_delta(
-                before.get("synthetic_smoke_test_only", {}).get("accuracy", {}),
-                after.get("synthetic_smoke_test_only", {}).get("accuracy", {}),
-            ),
-            "human_judgeable_baseline": old_human.get("judgeable_examples", 0),
-            "human_judgeable_candidate": new_human.get("judgeable_examples", 0),
+            "evaluation_groups": evaluation_groups,
+            "incomplete_baseline": before.get("incomplete", 0),
+            "incomplete_candidate": after.get("incomplete", 0),
+            "ambiguous_baseline": before.get("ambiguous", 0),
+            "ambiguous_candidate": after.get("ambiguous", 0),
+            "pending_baseline": before.get("pending", 0),
+            "pending_candidate": after.get("pending", 0),
         }
     return output
 
@@ -1517,6 +1794,17 @@ def _correctness_change(old: Mapping[str, Any], new: Mapping[str, Any]) -> str:
     if before is after:
         return "correctness_unchanged"
     return "improved" if after is DecisionConformity.CORRECT else "regressed"
+
+
+def _evaluation_group_for_record(record: Mapping[str, Any]) -> str | None:
+    if record.get("label_provenance") == "synthetic_fixture":
+        return "synthetic_smoke_test"
+    if record.get("label_provenance") == "human_reviewed":
+        if record.get("split") == "held_out":
+            return "human_reviewed_held_out"
+        if record.get("split") == "development":
+            return "human_reviewed_development"
+    return None
 
 
 def _follow_up(stages: Sequence[str]) -> str:
@@ -1663,6 +1951,36 @@ def _metric_delta(old: Mapping[str, Any], new: Mapping[str, Any]) -> dict[str, A
 
 def _format_rate(label: str, metric: Mapping[str, Any]) -> str:
     return f"- {label}: {_percent(metric.get('value'))} ({metric.get('numerator', 0)}/{metric.get('denominator', 0)})"
+
+
+def _format_metric_group(group: Mapping[str, Any], label: str) -> list[str]:
+    if not group.get("included"):
+        return ["Not included."]
+    decision = group["decision"]
+    ranking = group["candidate_ranking"]
+    lines = [
+        f"Judgeable examples: {group['example_count']}",
+        f"Small-sample warning (<30): {'yes' if group['small_sample_warning'] else 'no'}",
+        _format_rate("Decision accuracy", decision["accuracy"]),
+        _format_rate("False USE rate", decision["false_use_rate"]),
+        _format_rate("False USE share of judgeable examples", decision["false_use_share_of_judgeable_examples"]),
+        _format_rate("False NO_SKILL_NEEDED rate", decision["false_no_skill_needed_rate"]),
+        _format_rate("Unnecessary REVIEW rate", decision["unnecessary_review_rate"]),
+        "Per-decision precision and recall:",
+        *[
+            f"- {decision_name}: precision {_percent(item['precision']['value'])} "
+            f"({item['precision']['numerator']}/{item['precision']['denominator']}), "
+            f"recall {_percent(item['recall']['value'])} "
+            f"({item['recall']['numerator']}/{item['recall']['denominator']})"
+            for decision_name, item in sorted(decision["per_decision"].items())
+        ],
+        _format_rate("Top-1 candidate ordering", ranking["top1_accuracy"]),
+        _format_rate("Mean reciprocal rank", ranking["mean_reciprocal_rank"]),
+        _format_rate("Pairwise candidate ordering", ranking["pairwise_order_accuracy"]),
+    ]
+    if label.startswith("Synthetic"):
+        lines.append("This group is a tooling smoke test and is not evidence of recommendation quality.")
+    return lines
 
 
 def _percent(value: Any) -> str:

@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skillscout.local/schemas/calibration-dataset-v2.json",
+  "title": "SkillScout Human-Review Calibration Dataset v2",
+  "description": "Pending examples for an append-only offline human-review workflow. Labels belong in the review ledger, never inline in this dataset.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "dataset_version",
+    "data_kind",
+    "description",
+    "candidate_limit",
+    "evaluation_clock_utc",
+    "examples"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "skillscout-calibration-dataset-v2"
+    },
+    "dataset_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "dataset_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "data_kind": {
+      "enum": [
+        "human_reviewed"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "candidate_limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "evaluation_clock_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "examples": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/example"
+      }
+    }
+  },
+  "$defs": {
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "split",
+        "task",
+        "challenge_category",
+        "assessment_status",
+        "label_provenance",
+        "reviewer",
+        "expected_decision",
+        "expected_candidate_order",
+        "rationale",
+        "evidence_basis",
+        "project_facts",
+        "search"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+        },
+        "split": {
+          "enum": [
+            "development",
+            "held_out"
+          ]
+        },
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "challenge_category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "assessment_status": {
+          "enum": [
+            "pending"
+          ]
+        },
+        "label_provenance": {
+          "enum": [
+            "pending"
+          ]
+        },
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 120
+        },
+        "expected_decision": {
+          "enum": [
+            null
+          ]
+        },
+        "expected_candidate_order": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000
+        },
+        "evidence_basis": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "project_facts": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "search": {
+          "$ref": "#/$defs/search"
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "coverage_status",
+        "candidates"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "coverage_status": {
+          "enum": [
+            "adequate",
+            "incomplete",
+            "unknown",
+            "not_needed"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill",
+        "evidence",
+        "audit"
+      ],
+      "properties": {
+        "skill": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "source",
+            "slug",
+            "description"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 500
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "slug": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "content_hash",
+            "scope",
+            "files"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "complete",
+                "incomplete",
+                "unavailable"
+              ]
+            },
+            "content_hash": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "scope": {
+              "enum": [
+                "complete_synthetic_detail",
+                "selected_excerpts"
+              ]
+            },
+            "files": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "path",
+                  "text"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^(?!/)(?!.*\\\\)[^\\\\]+$"
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 30000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "audit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "findings",
+            "notes"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "available",
+                "none",
+                "unavailable"
+              ]
+            },
+            "findings": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "provider",
+                  "status",
+                  "summary",
+                  "audited_at",
+                  "revision"
+                ],
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "status": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "audited_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "risk_level": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "revision": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 256
+                  }
+                }
+              }
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

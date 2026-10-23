@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skillscout.local/schemas/calibration-review-event-v1.json",
+  "title": "SkillScout Calibration Review Event v1",
+  "description": "One append-only independent review, explicit revision, or adjudication. Events are bound to the exact dataset SHA-256.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "dataset_sha256", "event_id", "example_id", "event_type",
+    "reviewer_id", "status", "decision", "candidate_order", "rationale", "reason",
+    "evidence_basis", "timestamp_utc", "supersedes_event_id", "adjudicates_event_ids"
+  ],
+  "properties": {
+    "schema_version": { "const": "skillscout-calibration-review-event-v1" },
+    "dataset_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "example_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$" },
+    "event_type": { "enum": ["review", "revision", "adjudication"] },
+    "reviewer_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "status": { "enum": ["judgeable", "ambiguous", "unjudgeable"] },
+    "decision": { "enum": ["NO_SKILL_NEEDED", "USE", "REVIEW", "AVOID", null] },
+    "candidate_order": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": { "type": "string" } }
+      ]
+    },
+    "rationale": { "type": ["string", "null"], "maxLength": 1000 },
+    "reason": { "type": ["string", "null"], "maxLength": 1000 },
+    "evidence_basis": {
+      "type": "array", "maxItems": 20,
+      "items": { "type": "string", "maxLength": 500 }
+    },
+    "timestamp_utc": { "type": "string", "format": "date-time" },
+    "supersedes_event_id": { "type": ["string", "null"], "format": "uuid" },
+    "adjudicates_event_ids": {
+      "type": "array", "uniqueItems": true, "maxItems": 2,
+      "items": { "type": "string", "format": "uuid" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "judgeable" } } },
+      "then": {
+        "properties": {
+          "decision": { "enum": ["NO_SKILL_NEEDED", "USE", "REVIEW", "AVOID"] },
+          "rationale": { "type": "string", "minLength": 1 },
+          "reason": { "type": "null" },
+          "evidence_basis": { "type": "array", "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["ambiguous", "unjudgeable"] } } },
+      "then": {
+        "properties": {
+          "decision": { "type": "null" },
+          "candidate_order": { "type": "null" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "review" } } },
+      "then": { "properties": { "supersedes_event_id": { "type": "null" }, "adjudicates_event_ids": { "maxItems": 0 } } }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "revision" } } },
+      "then": { "properties": { "supersedes_event_id": { "type": "string", "format": "uuid" }, "adjudicates_event_ids": { "maxItems": 0 } } }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "adjudication" } } },
+      "then": { "properties": { "supersedes_event_id": { "type": "null" }, "adjudicates_event_ids": { "minItems": 2, "maxItems": 2 } } }
+    }
+  ]
+}

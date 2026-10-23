@@ -8,12 +8,19 @@ import sys
 from pathlib import Path
 
 from skillscout.evaluation.calibration import (
+    _run_example,
     compare_calibration_runs,
+    load_calibration_dataset,
     load_run_artifact,
     render_comparison_report,
     render_run_report,
     run_calibration,
     write_new_artifact,
+)
+from skillscout.evaluation.calibration_reviews import (
+    append_review_event,
+    read_review_ledger,
+    review_state,
 )
 from skillscout.evaluation.fixtures import DEFAULT_INCOMPLETE_FACTS, pin_fixture_pack, verify_fixture_pack
 from skillscout.evaluation.evidence_packets import (
@@ -56,6 +63,126 @@ def _read_json_input(path: str, *, expected_type: type) -> object:
     if not isinstance(value, expected_type):
         raise ValueError("JSON input has the wrong root type")
     return value
+
+
+def _add_review_label_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("dataset")
+    parser.add_argument("example_id")
+    parser.add_argument("--reviews", required=True, help="append-only human-review JSONL ledger path")
+    parser.add_argument("--reviewer", required=True, help="non-identifying reviewer token")
+    parser.add_argument("--status", required=True, choices=("judgeable", "ambiguous", "unjudgeable"))
+    parser.add_argument("--decision", choices=("NO_SKILL_NEEDED", "USE", "REVIEW", "AVOID"))
+    parser.add_argument("--candidate-order", nargs="+", help="ordered candidate IDs, best first")
+    parser.add_argument("--rationale", help="concise evidence-backed rationale for a judgeable label")
+    parser.add_argument("--reason", help="required reason for ambiguous or unjudgeable labels")
+    parser.add_argument("--evidence-basis", action="append", default=[], help="specific evidence fact; repeat for multiple facts")
+    parser.add_argument("--revise", action="store_true", help="append a revision while preserving the earlier label")
+
+
+def _run_calibration_review(args: argparse.Namespace) -> int:
+    dataset, dataset_sha256 = load_calibration_dataset(args.dataset)
+    examples = {item["id"]: item for item in dataset["examples"]}
+    if args.review_command == "show":
+        example = examples.get(args.example_id)
+        if example is None:
+            raise ValueError(f"unknown calibration example ID: {args.example_id}")
+        if example["split"] == "held_out" and not args.include_held_out:
+            raise ValueError("held-out inspection is sealed by default; pass --include-held-out to reveal it explicitly")
+        events, ledger_digest = read_review_ledger(
+            args.reviews, dataset=dataset, dataset_sha256=dataset_sha256
+        )
+        record = _run_example(dataset, example)
+        candidate_traces = {item["stable_id"]: item for item in record["trace"]["candidates"]}
+        payload = {
+            "example_id": example["id"],
+            "split": example["split"],
+            "challenge_category": example["challenge_category"],
+            "task": example["task"],
+            "project_facts": example["project_facts"],
+            "search": {
+                "complete": example["search"]["complete"],
+                "coverage_status": example["search"]["coverage_status"],
+                "candidates": [
+                    {
+                        "skill": candidate["skill"],
+                        "evidence": candidate["evidence"],
+                        "audit": candidate["audit"],
+                        "proposed_candidate_decision": candidate_traces.get(
+                            candidate["skill"]["id"], {}
+                        ).get("decision"),
+                        "proposed_candidate_reasons": candidate_traces.get(
+                            candidate["skill"]["id"], {}
+                        ).get("decision_reasons", []),
+                        "task_fit_rationale": candidate_traces.get(
+                            candidate["skill"]["id"], {}
+                        ).get("task_fit_rationale", []),
+                    }
+                    for candidate in example["search"]["candidates"]
+                ],
+            },
+            "proposed_decision": record["observed_decision"],
+            "proposed_rationale": record["trace"]["report_summary"],
+            "proposed_limitations": record["trace"]["report_limitations"],
+            "review_state": review_state(events, example["id"]),
+            "review_ledger_sha256": ledger_digest,
+        }
+        if example["split"] == "held_out":
+            payload["held_out_notice"] = "This is held-out material. Do not use it to select thresholds, vocabulary, or ranking changes."
+        print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.review_command == "status":
+        events, _ = read_review_ledger(
+            args.reviews, dataset=dataset, dataset_sha256=dataset_sha256
+        )
+        output = []
+        for example in dataset["examples"]:
+            state = review_state(events, example["id"])
+            output.append(
+                {
+                    "example_id": example["id"],
+                    "split": example["split"],
+                    "status": state["status"],
+                    "adjudication_status": state["adjudication_status"],
+                    "reviewer_ids": state["reviewer_ids"],
+                    "review_event_ids": state["review_event_ids"],
+                    "adjudicator_id": state["adjudicator_id"],
+                }
+            )
+        print(json.dumps(output, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.review_command in {"submit", "adjudicate"}:
+        if args.example_id not in examples:
+            raise ValueError(f"unknown calibration example ID: {args.example_id}")
+        events, _ = read_review_ledger(
+            args.reviews, dataset=dataset, dataset_sha256=dataset_sha256
+        )
+        event = append_review_event(
+            args.reviews,
+            dataset=dataset,
+            dataset_sha256=dataset_sha256,
+            events=events,
+            example_id=args.example_id,
+            reviewer_id=args.reviewer,
+            status=args.status,
+            decision=args.decision,
+            candidate_order=args.candidate_order,
+            rationale=args.rationale,
+            reason=args.reason,
+            evidence_basis=args.evidence_basis,
+            adjudication=args.review_command == "adjudicate",
+            revise=args.revise,
+            adjudicates_event_ids=getattr(args, "adjudicates", ()),
+        )
+        print(
+            json.dumps(
+                {"event_id": event["event_id"], "event_type": event["event_type"], "example_id": event["example_id"]},
+                indent=2,
+            )
+        )
+        return 0
+    raise ValueError("unsupported calibration review command")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -103,31 +230,95 @@ def main(argv: list[str] | None = None) -> int:
     calibration_run.add_argument("dataset")
     calibration_run.add_argument("--output", required=True, help="new machine-readable JSON artifact path")
     calibration_run.add_argument("--report", help="optional path for a new Markdown report")
+    calibration_run.add_argument("--reviews", help="optional append-only human-review JSONL ledger")
+    calibration_run.add_argument(
+        "--include-held-out",
+        action="store_true",
+        help="explicitly include held-out examples for a final evaluation report",
+    )
     calibration_compare = calibration_commands.add_parser("compare", help="compare two recorded calibration runs")
     calibration_compare.add_argument("baseline_run")
     calibration_compare.add_argument("candidate_run")
     calibration_compare.add_argument("--output", required=True, help="new machine-readable JSON artifact path")
     calibration_compare.add_argument("--report", help="optional path for a new Markdown report")
+    calibration_validate = calibration_commands.add_parser("validate", help="validate a dataset and its review history")
+    calibration_validate.add_argument("dataset")
+    calibration_validate.add_argument("--reviews", help="optional append-only human-review JSONL ledger")
+
+    calibration_review = calibration_commands.add_parser("review", help="inspect and record offline human judgments")
+    review_commands = calibration_review.add_subparsers(dest="review_command", required=True)
+    review_show = review_commands.add_parser("show", help="show a task, fixture evidence, and current proposal")
+    review_show.add_argument("dataset")
+    review_show.add_argument("example_id")
+    review_show.add_argument("--reviews", help="optional append-only human-review JSONL ledger")
+    review_show.add_argument("--include-held-out", action="store_true", help="explicitly reveal a held-out example")
+    review_status = review_commands.add_parser("status", help="show review and adjudication state for every example")
+    review_status.add_argument("dataset")
+    review_status.add_argument("--reviews", help="optional append-only human-review JSONL ledger")
+    review_submit = review_commands.add_parser("submit", help="append an independent label or explicit revision")
+    _add_review_label_arguments(review_submit)
+    review_adjudicate = review_commands.add_parser("adjudicate", help="append an independent adjudication of conflicting reviews")
+    _add_review_label_arguments(review_adjudicate)
+    review_adjudicate.add_argument("--adjudicates", nargs="+", required=True, help="all current conflicting review event IDs")
 
     args = parser.parse_args(argv)
     try:
         if args.command == "calibrate":
-            output_path = Path(args.output).resolve()
-            report_path = Path(args.report).resolve() if args.report else None
-            if report_path is not None and output_path == report_path:
-                raise ValueError("JSON output and Markdown report paths must be different")
             if args.calibration_command == "run":
-                result = run_calibration(args.dataset)
+                output_path = Path(args.output).resolve()
+                report_path = Path(args.report).resolve() if args.report else None
+                if report_path is not None and output_path == report_path:
+                    raise ValueError("JSON output and Markdown report paths must be different")
+                result = run_calibration(
+                    args.dataset,
+                    reviews_path=args.reviews,
+                    include_held_out=args.include_held_out,
+                )
                 report_text = render_run_report(result)
-            else:
+            elif args.calibration_command == "compare":
+                output_path = Path(args.output).resolve()
+                report_path = Path(args.report).resolve() if args.report else None
+                if report_path is not None and output_path == report_path:
+                    raise ValueError("JSON output and Markdown report paths must be different")
                 baseline = load_run_artifact(args.baseline_run)
                 candidate = load_run_artifact(args.candidate_run)
                 result = compare_calibration_runs(baseline, candidate)
                 report_text = render_comparison_report(result)
-            write_new_artifact(
-                output_path,
-                json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-            )
+            elif args.calibration_command == "validate":
+                dataset, digest = load_calibration_dataset(args.dataset)
+                events, ledger_digest = read_review_ledger(
+                    args.reviews, dataset=dataset, dataset_sha256=digest
+                )
+                states = {
+                    item["id"]: review_state(events, item["id"])
+                    for item in dataset["examples"]
+                }
+                print(
+                    json.dumps(
+                        {
+                            "integrity": "valid",
+                            "dataset_id": dataset["dataset_id"],
+                            "dataset_version": dataset["dataset_version"],
+                            "schema_version": dataset["schema_version"],
+                            "dataset_sha256": digest,
+                            "example_count": len(dataset["examples"]),
+                            "development_count": sum(item["split"] == "development" for item in dataset["examples"]),
+                            "held_out_count": sum(item["split"] == "held_out" for item in dataset["examples"]),
+                            "review_ledger_sha256": ledger_digest,
+                            "review_event_count": len(events),
+                            "review_states": {key: value["status"] for key, value in states.items()},
+                            "unresolved_conflicts": sum(value["status"] == "conflict" for value in states.values()),
+                            "awaiting_second_review": sum(value["status"] == "awaiting_independent_review" for value in states.values()),
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+                return 0
+            else:
+                return _run_calibration_review(args)
+            write_new_artifact(output_path, json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n")
             if report_path is not None:
                 write_new_artifact(report_path, report_text)
             print(report_text)

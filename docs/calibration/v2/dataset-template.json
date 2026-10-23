@@ -1,0 +1,10 @@
+{
+  "schema_version": "skillscout-calibration-dataset-v2",
+  "dataset_id": "skillscout-human-review-template",
+  "dataset_version": "2.0.0",
+  "data_kind": "human_reviewed",
+  "description": "Empty template for intentionally prepared, non-sensitive examples. Add pending examples with complete reproducibility evidence; labels are stored only in the append-only review ledger.",
+  "candidate_limit": 5,
+  "evaluation_clock_utc": "2026-10-24T00:00:00Z",
+  "examples": []
+}
