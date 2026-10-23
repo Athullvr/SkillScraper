@@ -1,20 +1,25 @@
 # SkillScout
 
-SkillScout is a local-first Python CLI for deciding whether a catalog skill adds clear value to a coding task. It ranks a small set of candidates, reads bounded project metadata, inspects catalog evidence, and reports limitations before a developer decides whether to install anything.
+SkillScout is a local-first Python CLI and MCP server for developers using compatible AI coding agents. It helps decide whether a catalog skill may add value to a coding task, then returns bounded evidence and limitations for a developer to review.
 
 SkillScout never installs, activates, imports, or executes candidate files. Proposed install commands are inert report text.
 
 ## Install and run
 
-Requires Python 3.12 or newer and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12 or newer. Install from a locally built wheel in a virtual environment:
 
 ```bash
-uv tool install .
+uv build --wheel
+python3.12 -m venv .venv
+. .venv/bin/activate
+python -m pip install ./dist/skillscout-0.1.0-py3-none-any.whl
 skillscout doctor
 skillscout recommend "Add Supabase OAuth login to the FastAPI service" --project . --agent codex
 skillscout recommend "Migrate this app from Django to FastAPI" --format json
 skillscout inspect vercel-labs/skills/find-skills
 ```
+
+The wheel declares its runtime dependencies and includes the `skillscout` and `skillscout-mcp` commands. The same wheel can be copied to another machine and installed with `python -m pip install /path/to/skillscout-0.1.0-py3-none-any.whl`. Dependency installation needs access to the configured Python package index. SkillScout itself is not published as part of this MVP.
 
 For development:
 
@@ -52,10 +57,11 @@ Checks the Python version and local configuration. It does not contact the catal
 
 SkillScout also exposes a local MCP server for compatible coding agents. Its tools call the same application workflows as the CLI and return validated, versioned structured results, so the agent does not need to parse Rich terminal output. MCP adds structured evidence gaps and a small task-scoped excerpt packet for agent consumption; it does not change ranking or decision policy.
 
-Install SkillScout so the `skillscout` command is on `PATH`, then register the stdio server:
+Install the wheel in an environment visible to your MCP host, then register the stdio server. The dedicated `skillscout-mcp` command starts the same server as `skillscout mcp`; both use the installed package and work from any current directory.
 
 ```bash
-uv tool install .
+skillscout doctor
+skillscout-mcp
 ```
 
 For Claude Code, create a project `.mcp.json` (or use Claude Code's MCP registration command) with:
@@ -64,24 +70,22 @@ For Claude Code, create a project `.mcp.json` (or use Claude Code's MCP registra
 {
   "mcpServers": {
     "skillscout": {
-      "command": "skillscout",
-      "args": ["mcp"]
+      "command": "skillscout-mcp"
     }
   }
 }
 ```
 
-This uses Claude Code's local stdio configuration format; see the [Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp). The command starts `skillscout mcp`, which speaks MCP over stdin/stdout and does not start an HTTP listener. `skillscout doctor` checks local config; `claude mcp list` can confirm the host registration.
+This uses Claude Code's local stdio configuration format; see the [Claude Code MCP guide](https://code.claude.com/docs/en/mcp). The command speaks MCP over stdin/stdout and does not start an HTTP listener. `skillscout doctor` checks local config; `claude mcp list` can confirm the host registration. The command must be on the host's `PATH`. If SkillScout is installed in a dedicated virtual environment, set `command` to that environment's `bin/skillscout-mcp` path (or `Scripts/skillscout-mcp.exe` on Windows).
 
-Codex CLI can use the same installed command through `~/.codex/config.toml`:
+Codex CLI can use the same installed command through `~/.codex/config.toml` (see the [Codex MCP guide](https://developers.openai.com/codex/mcp)):
 
 ```toml
 [mcp_servers.skillscout]
-command = "skillscout"
-args = ["mcp"]
+command = "skillscout-mcp"
 ```
 
-Registration makes the tools available but does not guarantee that the host will call them. In an observed Codex CLI run, an ordinary README typo prompt did not invoke SkillScout; a separate prompt that explicitly requested the tools did. To make skill selection consistent, add a host instruction such as: “Before choosing a specialist coding skill, call SkillScout `prepare_task` with the task and project path. Treat its result as evidence, and follow your own safety rules.” This repository's project-local [AGENTS.md](AGENTS.md) provides Codex guidance and was exercised in a paired invocation check. SkillScout does not edit agent configuration.
+Registration makes the tools available but does not guarantee that the host will call them. To make skill selection consistent, add a host instruction such as: “Before choosing a specialist coding skill, call SkillScout `prepare_task` with the task and project path. Treat its result as evidence, and follow your own safety rules.” SkillScout does not edit agent configuration. The JSON/TOML blocks above are examples to copy into the client configuration you choose; SkillScout does not modify global or project client settings.
 
 The server exposes three read-only tools:
 
@@ -213,6 +217,13 @@ Typer uses exit code `2` for invalid command syntax. JSON-mode errors use `{"sch
 | `SKILLSCOUT_LLM_SEND_TASK` | `false` | Explicitly allow sending task text for LLM task-fit help |
 
 Catalog requests use explicit connect/read timeouts, response size caps, and bounded retries. Audit lookup failures are recorded as unknown evidence and do not stop search. The API may require credentials; configure a token if search or detail requests return 401/403. SkillScout uses the documented [skills.sh API](https://www.skills.sh/docs/api) and emits inert commands following the [skills CLI reference](https://www.skills.sh/docs/cli).
+
+## Troubleshooting
+
+- If `skillscout` or `skillscout-mcp` is not found, activate the virtual environment used for installation or set the MCP client's `command` to that environment's console script path. The client host must be able to find the command.
+- If `doctor` reports invalid configuration, correct the named environment variable and restart the server. `doctor` checks local settings only; it does not contact the catalog or optional LLM provider.
+- If recommendation or inspection calls return a catalog authentication or availability error, check the process environment for the configured catalog token and network access, then retry. Credential values are not included in diagnostics.
+- The optional LLM path is disabled by default and is never used by MCP. For CLI setup and more catalog-specific guidance, see [troubleshooting](docs/troubleshooting.md).
 
 ## Privacy
 

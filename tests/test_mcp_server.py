@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import json
 import subprocess
 import sys
@@ -10,13 +11,13 @@ from pathlib import Path
 import pytest
 from mcp import Client
 
-from skillscout import application, mcp_server
+from skillscout import application, mcp_entrypoint, mcp_server
 from skillscout.catalog import (
     CatalogAuthenticationError,
     CatalogDataError,
     CatalogUnavailableError,
 )
-from skillscout.config import Config
+from skillscout.config import Config, ConfigurationError
 from skillscout.decision import build_candidate_report
 from skillscout.evidence_explanations import explain_candidate
 from skillscout.evidence_packet import build_evidence_packet
@@ -474,6 +475,20 @@ def test_doctor_tool_reports_configuration_without_host_or_secret_values(monkeyp
     assert "skills.test" not in json.dumps(result.structured_content)
 
 
+def test_doctor_tool_explains_invalid_setting_without_exposing_its_value(monkeypatch):
+    def invalid_config():
+        raise ConfigurationError("SKILLSCOUT_CANDIDATE_LIMIT must be between 1 and 5")
+
+    monkeypatch.setattr(application, "load_config", invalid_config)
+
+    result = _call_tool("doctor", {})
+
+    assert result.structured_content["status"] == "error"
+    assert result.structured_content["error"]["message"] == (
+        "SKILLSCOUT_CANDIDATE_LIMIT must be between 1 and 5"
+    )
+
+
 def test_response_schemas_are_versioned_and_match_checked_in_docs():
     docs = Path(__file__).parents[1] / "docs"
     assert json.loads((docs / "mcp-prepare.schema.json").read_text(encoding="utf-8")) == (
@@ -488,9 +503,28 @@ def test_server_entrypoint_explicitly_selects_stdio(monkeypatch):
     calls = []
     monkeypatch.setattr(mcp_server.server, "run", lambda **kwargs: calls.append(kwargs))
 
-    mcp_server.run_stdio()
+    mcp_entrypoint.main()
 
     assert calls == [{"transport": "stdio"}]
+
+
+def test_server_console_entrypoint_reports_missing_dependency_on_stderr(monkeypatch, capsys):
+    original_import = builtins.__import__
+
+    def missing_mcp_server(name, *args, **kwargs):
+        if name == "skillscout.mcp_server":
+            raise ModuleNotFoundError("missing MCP SDK")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing_mcp_server)
+
+    with pytest.raises(SystemExit) as error:
+        mcp_entrypoint.main()
+
+    captured = capsys.readouterr()
+    assert error.value.code == 2
+    assert "required runtime dependency" in captured.err
+    assert captured.out == ""
 
 
 def test_stdio_process_starts_without_non_protocol_startup_output():

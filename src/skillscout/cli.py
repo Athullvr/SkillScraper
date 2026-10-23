@@ -129,9 +129,9 @@ def doctor() -> None:
 @app.command(name="mcp")
 def mcp_command() -> None:
     """Start the local stdio MCP server for compatible coding agents."""
-    from skillscout.mcp_server import run_stdio
+    from skillscout.mcp_entrypoint import main as mcp_main
 
-    run_stdio()
+    mcp_main()
 
 
 @app.callback(invoke_without_command=True)

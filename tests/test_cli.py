@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import builtins
 import json
+
+import pytest
 
 from typer.testing import CliRunner
 
+from skillscout import entrypoint
 from skillscout.cli import app
 
 runner = CliRunner()
@@ -39,3 +43,22 @@ def test_json_errors_use_the_versioned_error_shape(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["schema_version"] == "1.0"
     assert payload["error"]["code"] == "input_error"
+
+
+def test_cli_entrypoint_reports_missing_dependencies_on_stderr(monkeypatch, capsys):
+    original_import = builtins.__import__
+
+    def missing_cli(name, *args, **kwargs):
+        if name == "skillscout.cli":
+            raise ModuleNotFoundError("missing Typer")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", missing_cli)
+
+    with pytest.raises(SystemExit) as error:
+        entrypoint.cli_main()
+
+    captured = capsys.readouterr()
+    assert error.value.code == 2
+    assert "Reinstall its wheel without --no-deps" in captured.err
+    assert captured.out == ""

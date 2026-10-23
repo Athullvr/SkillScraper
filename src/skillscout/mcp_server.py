@@ -163,10 +163,9 @@ async def prepare_task(
             "project_path must identify an accessible directory without symlink components",
             task=task,
         )
-    except ConfigurationError:
-        return _prepare_error(
-            "configuration_error", "SkillScout configuration is invalid", task=task
-        )
+    except ConfigurationError as exc:
+        # ConfigurationError messages name the invalid setting and expected format, never its value.
+        return _prepare_error("configuration_error", str(exc), task=task)
     except CatalogAuthenticationError:
         return _prepare_error(
             "catalog_authentication_error",
@@ -241,8 +240,8 @@ async def inspect_skill(
             "project_path_error",
             "project_path must identify an accessible directory without symlink components",
         )
-    except ConfigurationError:
-        return _inspect_error("configuration_error", "SkillScout configuration is invalid")
+    except ConfigurationError as exc:
+        return _inspect_error("configuration_error", str(exc))
     except CatalogAuthenticationError:
         return _inspect_error(
             "catalog_authentication_error",
@@ -270,12 +269,10 @@ async def doctor() -> MCPDoctorResult:
     """Report local SkillScout configuration without exposing values or testing the network."""
     try:
         report = doctor_report()
-    except ConfigurationError:
+    except ConfigurationError as exc:
         return MCPDoctorResult(
             status="error",
-            error=MCPToolError(
-                code="configuration_error", message="SkillScout configuration is invalid"
-            ),
+            error=MCPToolError(code="configuration_error", message=str(exc)),
         )
     return MCPDoctorResult(
         status="success",

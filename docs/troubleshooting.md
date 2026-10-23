@@ -1,7 +1,9 @@
 # Troubleshooting
 
-- **`skillscout: command not found`**: run `uv tool install .`, or use `uv run skillscout` from the project checkout after `uv sync`.
+- **`skillscout` or `skillscout-mcp` is not found**: activate the virtual environment where you installed the wheel, or add that environment's `bin` directory (`Scripts` on Windows) to the MCP host's `PATH`. From a development checkout, run `uv sync` and use `uv run skillscout`.
+- **The MCP host cannot start SkillScout**: run `skillscout doctor`, confirm the configured command is available to the host process, and check the host's MCP process logs (diagnostics go to stderr). If using a virtual environment, point `command` to its installed console script.
 - **Python version error**: install Python 3.12+ and ensure uv selects that interpreter.
+- **Invalid configuration**: `doctor` and tool errors identify the setting and expected format. Correct that environment variable and restart the MCP server; credential values are not printed.
 - **Catalog 401/403**: the current skills.sh API reference documents bearer-token authentication and no unauthenticated search/detail path. Enable OIDC Federation for a linked Vercel project, run `vercel link` and `vercel env pull`, then expose `VERCEL_OIDC_TOKEN` to the process that starts SkillScout. SkillScout does not load `.env.local` or refresh OIDC tokens; restart with a renewed token after expiry. The audit endpoint explicitly requires authentication.
 - **Catalog 429/503**: SkillScout respects `Retry-After` and retries a bounded number of times; retry later if the endpoint remains unavailable.
 - **`REVIEW` with no audit**: no audit result is known for that skill/revision. This is not a pass; inspect the source and decide manually.
