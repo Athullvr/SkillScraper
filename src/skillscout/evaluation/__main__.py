@@ -7,6 +7,14 @@ import json
 import sys
 from pathlib import Path
 
+from skillscout.evaluation.calibration import (
+    compare_calibration_runs,
+    load_run_artifact,
+    render_comparison_report,
+    render_run_report,
+    run_calibration,
+    write_new_artifact,
+)
 from skillscout.evaluation.fixtures import DEFAULT_INCOMPLETE_FACTS, pin_fixture_pack, verify_fixture_pack
 from skillscout.evaluation.evidence_packets import (
     apply_persisted_reviews_and_derive_metrics,
@@ -86,8 +94,45 @@ def main(argv: list[str] | None = None) -> int:
     packet_metrics.add_argument("--review-ledger", required=True)
     packet_metrics.add_argument("--authorization-reference", required=True)
 
+    calibrate = commands.add_parser(
+        "calibrate",
+        help="run offline recommendation-quality calibration on a versioned local fixture dataset",
+    )
+    calibration_commands = calibrate.add_subparsers(dest="calibration_command", required=True)
+    calibration_run = calibration_commands.add_parser("run", help="run the production pipeline on local fixtures")
+    calibration_run.add_argument("dataset")
+    calibration_run.add_argument("--output", required=True, help="new machine-readable JSON artifact path")
+    calibration_run.add_argument("--report", help="optional path for a new Markdown report")
+    calibration_compare = calibration_commands.add_parser("compare", help="compare two recorded calibration runs")
+    calibration_compare.add_argument("baseline_run")
+    calibration_compare.add_argument("candidate_run")
+    calibration_compare.add_argument("--output", required=True, help="new machine-readable JSON artifact path")
+    calibration_compare.add_argument("--report", help="optional path for a new Markdown report")
+
     args = parser.parse_args(argv)
     try:
+        if args.command == "calibrate":
+            output_path = Path(args.output).resolve()
+            report_path = Path(args.report).resolve() if args.report else None
+            if report_path is not None and output_path == report_path:
+                raise ValueError("JSON output and Markdown report paths must be different")
+            if args.calibration_command == "run":
+                result = run_calibration(args.dataset)
+                report_text = render_run_report(result)
+            else:
+                baseline = load_run_artifact(args.baseline_run)
+                candidate = load_run_artifact(args.candidate_run)
+                result = compare_calibration_runs(baseline, candidate)
+                report_text = render_comparison_report(result)
+            write_new_artifact(
+                output_path,
+                json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+            )
+            if report_path is not None:
+                write_new_artifact(report_path, report_text)
+            print(report_text)
+            return 0
+
         if args.command == "fixtures":
             dataset = load_dataset(_repository_root() / DATASET_RELATIVE_PATH)
             root = _contexts_path(args.root)
