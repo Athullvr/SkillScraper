@@ -134,6 +134,51 @@ def test_missing_audit_404_is_recorded_as_no_result(config):
     assert "No external audit" in notes[0]
 
 
+def test_excessive_audit_findings_are_unknown_not_passed(config):
+    def handler(request):
+        if request.url.path == "/api/v1/skills/search":
+            return httpx.Response(200, json={"data": [listing()]})
+        return httpx.Response(
+            200,
+            json={
+                "id": "acme/skills/fastapi-auth",
+                "audits": [
+                    {"provider": "Fixture", "status": "pass"} for _ in range(101)
+                ],
+            },
+        )
+
+    with mocked_catalog(config, handler) as catalog:
+        skill = catalog.search("FastAPI auth")[0]
+        audits, state, notes = catalog.get_audits(skill)
+
+    assert audits == []
+    assert state == "unavailable"
+    assert "supported finding count" in notes[0]
+
+
+def test_audit_error_envelope_is_unknown_not_empty(config):
+    def handler(request):
+        if request.url.path == "/api/v1/skills/search":
+            return httpx.Response(200, json={"data": [listing()]})
+        return httpx.Response(
+            200,
+            json={
+                "id": "acme/skills/fastapi-auth",
+                "success": False,
+                "audits": [],
+            },
+        )
+
+    with mocked_catalog(config, handler) as catalog:
+        skill = catalog.search("FastAPI auth")[0]
+        audits, state, notes = catalog.get_audits(skill)
+
+    assert audits == []
+    assert state == "unavailable"
+    assert "signaled failure" in notes[0]
+
+
 def test_transient_failure_retries_and_respects_retry_after(config):
     delays: list[float] = []
     responses = [

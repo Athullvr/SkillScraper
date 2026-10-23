@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from skillscout.decision import decide_candidate, make_inspection_evidence, report_for_candidates
+from skillscout.decision import (
+    build_candidate_report,
+    decide_candidate,
+    make_inspection_evidence,
+    report_for_candidates,
+)
 from skillscout.models import (
     AuditFinding,
     CatalogSkill,
@@ -260,4 +265,37 @@ def test_no_skill_report_is_distinct_from_candidate_security_decision():
 
     assert report.decision == Decision.NO_SKILL_NEEDED
     assert report.candidates == []
+
+
+def test_incomplete_search_with_low_relevance_candidate_requires_review(monkeypatch):
+    freeze_decision_clock(monkeypatch)
+    skill = CatalogSkill(
+        id="acme/skills/fastapi-auth",
+        source="acme/skills",
+        slug="fastapi-auth",
+        name="FastAPI authentication",
+    )
+    evidence = make_inspection_evidence(
+        detail("# FastAPI authentication guidance"), [passing_audit()], "available", []
+    )
+    candidate = build_candidate_report(
+        skill=skill,
+        rank=1,
+        relevance_score=0.1,
+        task_fit_rationale=["Weak task overlap"],
+        compatibility=compatible(),
+        evidence=evidence,
+        agent="codex",
+    )
+
+    report = report_for_candidates(
+        "Plan a gardening club newsletter",
+        "codex",
+        ProjectSnapshot(path="/tmp/project"),
+        [candidate],
+        search_complete=False,
+    )
+
+    assert report.decision == Decision.REVIEW
+    assert any("incomplete search" in item for item in report.limitations)
 

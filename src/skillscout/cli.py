@@ -15,6 +15,13 @@ from skillscout.catalog import (
     CatalogClient,
     CatalogDataError,
     CatalogError,
+    CatalogCredentialsMissingError,
+    CatalogCredentialsRejectedError,
+    CatalogHTTPError,
+    CatalogNotFoundError,
+    CatalogRateLimitError,
+    CatalogServiceError,
+    CatalogTimeoutError,
     CatalogUnavailableError,
 )
 from skillscout.config import ConfigurationError, load_config
@@ -68,11 +75,31 @@ def recommend(
             raise typer.Exit(code=4)
     except typer.Exit:
         raise
-    except (ConfigurationError, ProjectContextError, ValueError) as exc:
+    except ConfigurationError as exc:
+        _emit_error(str(exc), output_format, code="configuration_error", exit_code=2)
+    except (ProjectContextError, ValueError) as exc:
         _emit_error(str(exc), output_format, code="input_error", exit_code=2)
+    except CatalogCredentialsMissingError as exc:
+        _emit_error(str(exc), output_format, code="catalog_credentials_missing", exit_code=3)
+    except CatalogCredentialsRejectedError as exc:
+        _emit_error(str(exc), output_format, code="catalog_credentials_rejected", exit_code=3)
     except CatalogAuthenticationError as exc:
         _emit_error(str(exc), output_format, code="catalog_authentication_error", exit_code=3)
-    except (CatalogUnavailableError, CatalogDataError, CatalogError) as exc:
+    except CatalogTimeoutError as exc:
+        _emit_error(str(exc), output_format, code="catalog_timeout", exit_code=3)
+    except CatalogRateLimitError as exc:
+        _emit_error(str(exc), output_format, code="catalog_rate_limited", exit_code=3)
+    except CatalogServiceError as exc:
+        _emit_error(str(exc), output_format, code="catalog_service_error", exit_code=3)
+    except CatalogNotFoundError as exc:
+        _emit_error(str(exc), output_format, code="catalog_not_found", exit_code=3)
+    except CatalogHTTPError as exc:
+        _emit_error(str(exc), output_format, code="catalog_http_error", exit_code=3)
+    except CatalogUnavailableError as exc:
+        _emit_error(str(exc), output_format, code="catalog_unavailable", exit_code=3)
+    except CatalogDataError as exc:
+        _emit_error(str(exc), output_format, code="catalog_data_error", exit_code=3)
+    except CatalogError as exc:
         _emit_error(str(exc), output_format, code="catalog_error", exit_code=3)
 
 
@@ -105,11 +132,31 @@ def inspect(
             raise typer.Exit(code=4)
     except typer.Exit:
         raise
-    except (ConfigurationError, ProjectContextError, ValueError) as exc:
+    except ConfigurationError as exc:
+        _emit_error(str(exc), output_format, code="configuration_error", exit_code=2)
+    except (ProjectContextError, ValueError) as exc:
         _emit_error(str(exc), output_format, code="input_error", exit_code=2)
+    except CatalogCredentialsMissingError as exc:
+        _emit_error(str(exc), output_format, code="catalog_credentials_missing", exit_code=3)
+    except CatalogCredentialsRejectedError as exc:
+        _emit_error(str(exc), output_format, code="catalog_credentials_rejected", exit_code=3)
     except CatalogAuthenticationError as exc:
         _emit_error(str(exc), output_format, code="catalog_authentication_error", exit_code=3)
-    except (CatalogUnavailableError, CatalogDataError, CatalogError) as exc:
+    except CatalogTimeoutError as exc:
+        _emit_error(str(exc), output_format, code="catalog_timeout", exit_code=3)
+    except CatalogRateLimitError as exc:
+        _emit_error(str(exc), output_format, code="catalog_rate_limited", exit_code=3)
+    except CatalogServiceError as exc:
+        _emit_error(str(exc), output_format, code="catalog_service_error", exit_code=3)
+    except CatalogNotFoundError as exc:
+        _emit_error(str(exc), output_format, code="catalog_not_found", exit_code=3)
+    except CatalogHTTPError as exc:
+        _emit_error(str(exc), output_format, code="catalog_http_error", exit_code=3)
+    except CatalogUnavailableError as exc:
+        _emit_error(str(exc), output_format, code="catalog_unavailable", exit_code=3)
+    except CatalogDataError as exc:
+        _emit_error(str(exc), output_format, code="catalog_data_error", exit_code=3)
+    except CatalogError as exc:
         _emit_error(str(exc), output_format, code="catalog_error", exit_code=3)
 
 

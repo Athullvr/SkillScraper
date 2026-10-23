@@ -210,13 +210,14 @@ Typer uses exit code `2` for invalid command syntax. JSON-mode errors use `{"sch
 | `SKILLSCOUT_CATALOG_URL` | `https://skills.sh` | HTTPS skills.sh-compatible API base |
 | `SKILLSCOUT_CATALOG_TOKEN` | unset | Bearer token override for a catalog endpoint that accepts it; no separate skills.sh API key is documented |
 | `VERCEL_OIDC_TOKEN` | unset | Supported skills.sh bearer credential documented by skills.sh and Vercel |
+| `SKILLSCOUT_REQUEST_TIMEOUT_SECONDS` | `30` | Total catalog request window, bounded to 1–120 seconds |
 | `SKILLSCOUT_CANDIDATE_LIMIT` | `3` | Detail records to inspect, bounded to 1–5 |
 | `SKILLSCOUT_LLM_API_KEY` | unset | Optional OpenAI-compatible provider key |
 | `SKILLSCOUT_LLM_BASE_URL` | `https://api.openai.com/v1` | Optional provider API base |
 | `SKILLSCOUT_LLM_MODEL` | `gpt-4o-mini` | Optional provider model identifier |
 | `SKILLSCOUT_LLM_SEND_TASK` | `false` | Explicitly allow sending task text for LLM task-fit help |
 
-Catalog requests use explicit connect/read timeouts, response size caps, and bounded retries. Audit lookup failures are recorded as unknown evidence and do not stop search. The API may require credentials; configure a token if search or detail requests return 401/403. SkillScout uses the documented [skills.sh API](https://www.skills.sh/docs/api) and emits inert commands following the [skills CLI reference](https://www.skills.sh/docs/cli).
+Catalog requests use explicit connect/read timeouts, a total request window, response size caps, and bounded retries. Permanent HTTP failures are not retried; authentication, rate-limit, service, timeout, and malformed-response failures are reported separately. Audit lookup failures are recorded as unknown evidence and do not stop search. A search page that reaches its requested limit without explicit completeness metadata, or advertises more results, is marked incomplete. SkillScout can still report an inspected candidate from that page, but if no returned candidate clears the relevance threshold it returns `REVIEW`, not `NO_SKILL_NEEDED`. A successfully completed empty search can return `NO_SKILL_NEEDED`. The API may require credentials; configure a token if search or detail requests return 401/403. SkillScout uses the documented [skills.sh API](https://www.skills.sh/docs/api) and emits inert commands following the [skills CLI reference](https://www.skills.sh/docs/cli).
 
 ## Troubleshooting
 

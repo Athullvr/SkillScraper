@@ -24,6 +24,33 @@ def _bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
     return value
 
 
+def _bounded_float(name: str, default: float, minimum: float, maximum: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ConfigurationError(f"{name} must be a number") from exc
+    if not minimum <= value <= maximum:
+        raise ConfigurationError(f"{name} must be between {minimum:g} and {maximum:g}")
+    return value
+
+
+def _optional_header_secret(name: str) -> str | None:
+    """Read an HTTP header credential without ever including its value in errors."""
+    value = os.getenv(name)
+    if value is None or value == "":
+        return None
+    if not value.isascii() or any(
+        ord(character) <= 32 or ord(character) >= 127 for character in value
+    ):
+        raise ConfigurationError(
+            f"{name} must be a single-line printable ASCII value without whitespace"
+        )
+    return value
+
+
 @dataclass(frozen=True)
 class Config:
     catalog_base_url: str
@@ -37,6 +64,7 @@ class Config:
     llm_base_url: str
     llm_model: str
     llm_send_task: bool
+    request_timeout_seconds: float = 30.0
 
 
 def load_config() -> Config:
@@ -80,17 +108,29 @@ def load_config() -> Config:
     if not model or len(model) > 200:
         raise ConfigurationError("SKILLSCOUT_LLM_MODEL must contain between 1 and 200 characters")
 
+    send_task_raw = os.getenv("SKILLSCOUT_LLM_SEND_TASK", "").lower()
+    if send_task_raw not in {"", "0", "1", "true", "false", "yes", "no"}:
+        raise ConfigurationError(
+            "SKILLSCOUT_LLM_SEND_TASK must be one of 1, 0, true, false, yes, or no"
+        )
+    catalog_token = _optional_header_secret("SKILLSCOUT_CATALOG_TOKEN")
+    if catalog_token is None:
+        catalog_token = _optional_header_secret("VERCEL_OIDC_TOKEN")
+
     return Config(
         catalog_base_url=base_url,
-        catalog_token=os.getenv("SKILLSCOUT_CATALOG_TOKEN") or os.getenv("VERCEL_OIDC_TOKEN"),
+        catalog_token=catalog_token,
         candidate_limit=_bounded_int("SKILLSCOUT_CANDIDATE_LIMIT", 3, 1, 5),
         connect_timeout_seconds=5.0,
         read_timeout_seconds=15.0,
         max_response_bytes=2_000_000,
         retry_count=2,
-        llm_api_key=os.getenv("SKILLSCOUT_LLM_API_KEY"),
+        llm_api_key=_optional_header_secret("SKILLSCOUT_LLM_API_KEY"),
         llm_base_url=llm_base_url,
         llm_model=model,
-        llm_send_task=os.getenv("SKILLSCOUT_LLM_SEND_TASK", "").lower() in {"1", "true", "yes"},
+        llm_send_task=send_task_raw in {"1", "true", "yes"},
+        request_timeout_seconds=_bounded_float(
+            "SKILLSCOUT_REQUEST_TIMEOUT_SECONDS", 30.0, 1.0, 120.0
+        ),
     )
 

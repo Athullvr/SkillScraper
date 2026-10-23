@@ -18,6 +18,13 @@ from skillscout.catalog import (
     CatalogAuthenticationError,
     CatalogDataError,
     CatalogError,
+    CatalogCredentialsMissingError,
+    CatalogCredentialsRejectedError,
+    CatalogHTTPError,
+    CatalogNotFoundError,
+    CatalogRateLimitError,
+    CatalogServiceError,
+    CatalogTimeoutError,
     CatalogUnavailableError,
 )
 from skillscout.config import ConfigurationError
@@ -166,16 +173,58 @@ async def prepare_task(
     except ConfigurationError as exc:
         # ConfigurationError messages name the invalid setting and expected format, never its value.
         return _prepare_error("configuration_error", str(exc), task=task)
+    except CatalogCredentialsMissingError:
+        return _prepare_error(
+            "catalog_credentials_missing",
+            "The catalog requires credentials; configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN",
+            task=task,
+        )
+    except CatalogCredentialsRejectedError:
+        return _prepare_error(
+            "catalog_credentials_rejected",
+            "The configured catalog credential was rejected or lacks access; verify it and restart SkillScout",
+            task=task,
+        )
     except CatalogAuthenticationError:
         return _prepare_error(
             "catalog_authentication_error",
             "Catalog authentication is required; configure SkillScout catalog credentials and retry",
             task=task,
         )
+    except CatalogTimeoutError:
+        return _prepare_error(
+            "catalog_timeout",
+            "The catalog request timed out after bounded retries; retry later",
+            task=task,
+        )
+    except CatalogRateLimitError:
+        return _prepare_error(
+            "catalog_rate_limited",
+            "The catalog continued rate limiting after bounded retries; wait before retrying",
+            task=task,
+        )
+    except CatalogServiceError:
+        return _prepare_error(
+            "catalog_service_error",
+            "The catalog service returned a server error after bounded retries; retry later",
+            task=task,
+        )
     except CatalogUnavailableError:
         return _prepare_error(
             "catalog_unavailable",
             "The catalog could not be reached after bounded retries; retry later",
+            task=task,
+        )
+    except CatalogNotFoundError:
+        return _prepare_error(
+            "catalog_not_found",
+            "The requested catalog resource was not found; check the skill identifier",
+            task=task,
+        )
+    except CatalogHTTPError:
+        return _prepare_error(
+            "catalog_http_error",
+            "The catalog rejected the request; verify the endpoint and request settings",
             task=task,
         )
     except CatalogDataError:
@@ -242,14 +291,46 @@ async def inspect_skill(
         )
     except ConfigurationError as exc:
         return _inspect_error("configuration_error", str(exc))
+    except CatalogCredentialsMissingError:
+        return _inspect_error(
+            "catalog_credentials_missing",
+            "The catalog requires credentials; configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN",
+        )
+    except CatalogCredentialsRejectedError:
+        return _inspect_error(
+            "catalog_credentials_rejected",
+            "The configured catalog credential was rejected or lacks access; verify it and restart SkillScout",
+        )
     except CatalogAuthenticationError:
         return _inspect_error(
             "catalog_authentication_error",
             "Catalog authentication is required; configure SkillScout catalog credentials and retry",
         )
+    except CatalogTimeoutError:
+        return _inspect_error(
+            "catalog_timeout", "The catalog request timed out after bounded retries; retry later"
+        )
+    except CatalogRateLimitError:
+        return _inspect_error(
+            "catalog_rate_limited",
+            "The catalog continued rate limiting after bounded retries; wait before retrying",
+        )
+    except CatalogServiceError:
+        return _inspect_error(
+            "catalog_service_error",
+            "The catalog service returned a server error after bounded retries; retry later",
+        )
     except CatalogUnavailableError:
         return _inspect_error(
             "catalog_unavailable", "The catalog could not be reached after bounded retries"
+        )
+    except CatalogNotFoundError:
+        return _inspect_error(
+            "catalog_not_found", "The requested skill was not found; check the stable skill ID"
+        )
+    except CatalogHTTPError:
+        return _inspect_error(
+            "catalog_http_error", "The catalog rejected the request; verify the endpoint and skill ID"
         )
     except CatalogDataError:
         return _inspect_error(

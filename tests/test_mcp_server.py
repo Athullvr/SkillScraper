@@ -14,7 +14,14 @@ from mcp import Client
 from skillscout import application, mcp_entrypoint, mcp_server
 from skillscout.catalog import (
     CatalogAuthenticationError,
+    CatalogCredentialsMissingError,
+    CatalogCredentialsRejectedError,
     CatalogDataError,
+    CatalogHTTPError,
+    CatalogNotFoundError,
+    CatalogRateLimitError,
+    CatalogServiceError,
+    CatalogTimeoutError,
     CatalogUnavailableError,
 )
 from skillscout.config import Config, ConfigurationError
@@ -336,7 +343,20 @@ def test_critical_risk_is_not_downgraded_by_low_relevance(tmp_path, monkeypatch)
             CatalogAuthenticationError("credential value must not appear"),
             "catalog_authentication_error",
         ),
+        (
+            CatalogCredentialsMissingError("credential value must not appear"),
+            "catalog_credentials_missing",
+        ),
+        (
+            CatalogCredentialsRejectedError("credential value must not appear"),
+            "catalog_credentials_rejected",
+        ),
         (CatalogUnavailableError("request timed out"), "catalog_unavailable"),
+        (CatalogRateLimitError("rate limited"), "catalog_rate_limited"),
+        (CatalogServiceError("server failed"), "catalog_service_error"),
+        (CatalogTimeoutError("request timed out"), "catalog_timeout"),
+        (CatalogHTTPError(400), "catalog_http_error"),
+        (CatalogNotFoundError(404), "catalog_not_found"),
         (CatalogDataError("malformed response"), "catalog_data_error"),
     ],
 )

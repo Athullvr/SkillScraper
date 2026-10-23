@@ -2,11 +2,21 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from skillscout import cli
-from skillscout.catalog import CatalogUnavailableError
-from skillscout.config import Config
+from skillscout.catalog import (
+    CatalogCredentialsMissingError,
+    CatalogCredentialsRejectedError,
+    CatalogDataError,
+    CatalogHTTPError,
+    CatalogNotFoundError,
+    CatalogRateLimitError,
+    CatalogTimeoutError,
+    CatalogUnavailableError,
+)
+from skillscout.config import Config, ConfigurationError
 from skillscout.models import AuditFinding, CatalogSkill, SkillDetail, SkillFile, utc_now
 
 
@@ -54,7 +64,60 @@ def test_catalog_failure_has_useful_json_and_exit_code_three(tmp_path, monkeypat
     assert result.exit_code == 3
     payload = json.loads(result.stdout)
     assert payload["schema_version"] == "1.0"
-    assert payload["error"]["code"] == "catalog_error"
+    assert payload["error"]["code"] == "catalog_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_code"),
+    [
+        (CatalogCredentialsMissingError("configure a bearer token"), "catalog_credentials_missing"),
+        (CatalogCredentialsRejectedError("credential rejected"), "catalog_credentials_rejected"),
+        (CatalogRateLimitError("rate limited"), "catalog_rate_limited"),
+        (CatalogTimeoutError("timed out"), "catalog_timeout"),
+        (CatalogHTTPError(400), "catalog_http_error"),
+        (CatalogNotFoundError(404), "catalog_not_found"),
+        (CatalogDataError("catalog response did not match schema"), "catalog_data_error"),
+        (CatalogUnavailableError("network unavailable"), "catalog_unavailable"),
+    ],
+)
+def test_cli_reports_catalog_failure_classes(tmp_path, monkeypatch, error, expected_code):
+    monkeypatch.setattr(cli, "load_config", _offline_config)
+
+    class FailingCatalog:
+        def __init__(self, _config):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def search(self, _query, *, limit):
+            raise error
+
+    monkeypatch.setattr(cli, "CatalogClient", FailingCatalog)
+    result = runner.invoke(
+        cli.app,
+        ["recommend", "Implement FastAPI OAuth login", "--project", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 3
+    assert json.loads(result.stdout)["error"]["code"] == expected_code
+
+
+def test_configuration_errors_are_not_reported_as_input_errors(tmp_path, monkeypatch):
+    def invalid_config():
+        raise ConfigurationError("SKILLSCOUT_CANDIDATE_LIMIT must be between 1 and 5")
+
+    monkeypatch.setattr(cli, "load_config", invalid_config)
+    result = runner.invoke(
+        cli.app,
+        ["recommend", "Implement FastAPI OAuth login", "--project", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "configuration_error"
 
 
 def test_current_critical_audit_produces_avoid_and_exit_code_four(tmp_path, monkeypatch):

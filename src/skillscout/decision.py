@@ -45,6 +45,31 @@ def no_skill_report(
     )
 
 
+def incomplete_search_report(
+    task: str,
+    agent: str,
+    project: ProjectSnapshot,
+    *,
+    limitations: list[str] | None = None,
+) -> Report:
+    """Report uncertainty when the catalog did not establish a complete search page."""
+    return Report(
+        task=task,
+        agent=agent,
+        project=project,
+        decision=Decision.REVIEW,
+        summary=(
+            "The catalog search was incomplete; SkillScout cannot determine whether a skill would help."
+        ),
+        candidates=[],
+        limitations=[
+            *(limitations or []),
+            "The catalog indicated that more search results may be available; retry or review "
+            "the catalog results manually.",
+        ],
+    )
+
+
 def should_skip_catalog_for_task(task: str) -> bool:
     return task_is_routine(task)
 
@@ -314,9 +339,17 @@ def report_for_candidates(
     candidates: list[CandidateReport],
     *,
     limitations: list[str] | None = None,
+    search_complete: bool = True,
 ) -> Report:
     """Choose the overall result from relevance first and policy second."""
     if not candidates:
+        if not search_complete:
+            return incomplete_search_report(
+                task,
+                agent,
+                project,
+                limitations=limitations,
+            )
         return no_skill_report(
             task,
             agent,
@@ -339,6 +372,22 @@ def report_for_candidates(
             limitations=limitations or [],
         )
     if best.relevance_score < relevance_threshold():
+        if not search_complete:
+            return Report(
+                task=task,
+                agent=agent,
+                project=project,
+                decision=Decision.REVIEW,
+                summary=(
+                    "No inspected candidate met the initial relevance threshold, but the catalog "
+                    "search may have more results."
+                ),
+                candidates=candidates,
+                limitations=[
+                    *(limitations or []),
+                    "An incomplete search cannot establish that no useful skill exists.",
+                ],
+            )
         incomplete = [
             candidate
             for candidate in candidates

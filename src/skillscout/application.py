@@ -13,6 +13,7 @@ from skillscout.catalog import CatalogClient, CatalogError
 from skillscout.config import Config, load_config
 from skillscout.decision import (
     build_candidate_report,
+    incomplete_search_report,
     make_inspection_evidence,
     make_inspection_report,
     missing_evidence,
@@ -78,7 +79,6 @@ def prepare_recommendation(
     """
     task = validate_task(task)
     agent = validate_agent(agent)
-    config = (config_loader or load_config)()
     project = (project_context_reader or read_project_context)(
         Path.cwd() if project_path is None else project_path
     )
@@ -94,6 +94,9 @@ def prepare_recommendation(
             ],
         )
 
+    # Routine tasks are decided locally; catalog and optional-service configuration
+    # must not block this fast path.
+    config = (config_loader or load_config)()
     catalog_factory = catalog_client_factory or CatalogClient
     llm_factory = llm_adapter_factory or LLMAdapter
     llm_context = llm_factory(config) if allow_llm else nullcontext(None)
@@ -102,7 +105,12 @@ def prepare_recommendation(
             redact_secrets(task),
             limit=min(50, max(10, config.candidate_limit * 6)),
         )
+        search_complete = getattr(search_results, "complete", True)
+        if type(search_complete) is not bool:
+            raise CatalogError("catalog search completeness metadata was invalid")
         if not search_results:
+            if not search_complete:
+                return incomplete_search_report(task, agent, project)
             return no_skill_report(
                 task,
                 agent,
@@ -125,14 +133,22 @@ def prepare_recommendation(
             candidate.model_copy(update={"rank": index})
             for index, candidate in enumerate(candidate_reports, start=1)
         ]
+        report_limitations = [
+            f"Inspected at most {config.candidate_limit} candidate detail records; "
+            "ranking weights are initial hypotheses, not validated truth."
+        ]
+        if not search_complete:
+            report_limitations.append(
+                "The catalog indicated that more search results may be available; this "
+                "recommendation covers only returned candidates."
+            )
         return report_for_candidates(
             task,
             agent,
             project,
             candidate_reports,
-            limitations=[
-                f"Inspected at most {config.candidate_limit} candidate detail records; ranking weights are initial hypotheses, not validated truth."
-            ],
+            limitations=report_limitations,
+            search_complete=search_complete,
         )
 
 

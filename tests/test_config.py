@@ -32,3 +32,31 @@ def test_llm_requires_task_text_opt_in_to_be_active(monkeypatch):
 
     assert config.llm_api_key is not None
     assert not config.llm_send_task
+
+
+@pytest.mark.parametrize("name", ["SKILLSCOUT_CATALOG_TOKEN", "VERCEL_OIDC_TOKEN", "SKILLSCOUT_LLM_API_KEY"])
+def test_http_credentials_reject_whitespace_without_echoing_the_value(monkeypatch, name):
+    secret = "fixture credential with spaces"
+    monkeypatch.setenv(name, secret)
+
+    with pytest.raises(ConfigurationError) as error:
+        load_config()
+
+    assert name in str(error.value)
+    assert secret not in str(error.value)
+
+
+def test_invalid_llm_task_opt_in_is_reported(monkeypatch):
+    monkeypatch.setenv("SKILLSCOUT_LLM_SEND_TASK", "sometimes")
+
+    with pytest.raises(ConfigurationError, match="SKILLSCOUT_LLM_SEND_TASK"):
+        load_config()
+
+
+def test_total_request_timeout_is_bounded(monkeypatch):
+    monkeypatch.setenv("SKILLSCOUT_REQUEST_TIMEOUT_SECONDS", "45")
+    assert load_config().request_timeout_seconds == 45
+
+    monkeypatch.setenv("SKILLSCOUT_REQUEST_TIMEOUT_SECONDS", "121")
+    with pytest.raises(ConfigurationError, match="SKILLSCOUT_REQUEST_TIMEOUT_SECONDS"):
+        load_config()

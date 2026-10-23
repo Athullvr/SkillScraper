@@ -1,10 +1,22 @@
 from __future__ import annotations
 
-import httpx
-import pytest
+import time
 from dataclasses import replace
 
-from skillscout.catalog import CatalogClient, CatalogDataError, CatalogUnavailableError
+import httpx
+import pytest
+
+from skillscout.catalog import (
+    CatalogClient,
+    CatalogCredentialsMissingError,
+    CatalogCredentialsRejectedError,
+    CatalogDataError,
+    CatalogHTTPError,
+    CatalogNotFoundError,
+    CatalogRateLimitError,
+    CatalogServiceError,
+    CatalogUnavailableError,
+)
 from skillscout.models import CatalogSkill
 
 
@@ -26,6 +38,20 @@ def test_empty_search_response_is_a_valid_empty_result(config):
     )
     try:
         assert catalog.search("FastAPI authentication") == []
+    finally:
+        client.close()
+
+
+def test_search_error_envelope_is_not_treated_as_an_empty_result(config):
+    catalog, client = _catalog(
+        config,
+        lambda _request: httpx.Response(
+            200, json={"data": [], "error": {"code": "temporarily_unavailable"}}
+        ),
+    )
+    try:
+        with pytest.raises(CatalogDataError, match="error envelope"):
+            catalog.search("FastAPI authentication")
     finally:
         client.close()
 
@@ -171,7 +197,8 @@ def test_rate_limits_and_server_errors_have_bounded_retries(config, status_code)
 
     catalog, client = _catalog(config, handler, delays)
     try:
-        with pytest.raises(CatalogUnavailableError):
+        expected_error = CatalogRateLimitError if status_code == 429 else CatalogServiceError
+        with pytest.raises(expected_error):
             catalog.search("FastAPI authentication")
     finally:
         client.close()
@@ -180,6 +207,186 @@ def test_rate_limits_and_server_errors_have_bounded_retries(config, status_code)
     assert len(delays) == config.retry_count
     if status_code == 429:
         assert delays == [0.0, 0.0]
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_error"),
+    [
+        (301, CatalogHTTPError),
+        (400, CatalogHTTPError),
+        (404, CatalogNotFoundError),
+    ],
+)
+def test_permanent_http_responses_are_classified_without_retry(config, status_code, expected_error):
+    requests = 0
+
+    def handler(_request):
+        nonlocal requests
+        requests += 1
+        return httpx.Response(status_code)
+
+    catalog, client = _catalog(config, handler)
+    try:
+        with pytest.raises(expected_error) as error:
+            catalog.search("FastAPI authentication")
+    finally:
+        client.close()
+
+    assert error.value.status_code == status_code
+    assert requests == 1
+
+
+@pytest.mark.parametrize(
+    ("token", "expected_error"),
+    [
+        (None, CatalogCredentialsMissingError),
+        ("fixture-token-never-log", CatalogCredentialsRejectedError),
+    ],
+)
+def test_authentication_failures_distinguish_missing_and_rejected_credentials(
+    config, token, expected_error
+):
+    from dataclasses import replace
+
+    configured = replace(config, catalog_token=token)
+    requests = 0
+
+    def handler(_request):
+        nonlocal requests
+        requests += 1
+        return httpx.Response(401)
+
+    catalog, client = _catalog(configured, handler)
+    try:
+        with pytest.raises(expected_error) as error:
+            catalog.search("FastAPI authentication")
+    finally:
+        client.close()
+
+    assert requests == 1
+    assert "fixture-token-never-log" not in str(error.value)
+
+
+def test_rate_limit_with_excessive_retry_after_fails_without_unbounded_wait(config):
+    requests = 0
+    delays: list[float] = []
+
+    def handler(_request):
+        nonlocal requests
+        requests += 1
+        return httpx.Response(429, headers={"Retry-After": "301"})
+
+    catalog, client = _catalog(config, handler, delays)
+    try:
+        with pytest.raises(CatalogRateLimitError, match="bounded retry window"):
+            catalog.search("FastAPI authentication")
+    finally:
+        client.close()
+
+    assert requests == 1
+    assert delays == []
+
+
+def test_local_protocol_failure_is_not_retried(config):
+    requests = 0
+    delays: list[float] = []
+
+    def handler(request):
+        nonlocal requests
+        requests += 1
+        raise httpx.LocalProtocolError("invalid local request", request=request)
+
+    catalog, client = _catalog(config, handler, delays)
+    try:
+        with pytest.raises(CatalogUnavailableError, match="verify the catalog URL"):
+            catalog.search("FastAPI authentication")
+    finally:
+        client.close()
+
+    assert requests == 1
+    assert delays == []
+
+
+def test_total_request_deadline_bounds_slow_response_streams(config):
+    slow_config = replace(config, request_timeout_seconds=0.001, retry_count=0)
+    requests = 0
+
+    class SlowStream(httpx.SyncByteStream):
+        def __iter__(self):
+            time.sleep(0.01)
+            yield b'{"data":[]}'
+
+        def close(self):
+            return None
+
+    def handler(_request):
+        nonlocal requests
+        requests += 1
+        return httpx.Response(200, stream=SlowStream())
+
+    catalog, client = _catalog(slow_config, handler)
+    try:
+        with pytest.raises(CatalogUnavailableError, match="configured timeout"):
+            catalog.search("FastAPI authentication")
+    finally:
+        client.close()
+
+    assert requests == 1
+
+
+def test_search_marks_full_or_paged_result_windows_incomplete(config):
+    skill = {
+        "id": "acme/skills/fastapi-auth",
+        "name": "FastAPI Auth",
+        "source": "acme/skills",
+        "slug": "fastapi-auth",
+        "installs": 3,
+    }
+    payload = {"data": [skill], "hasMore": True}
+    catalog, client = _catalog(
+        config,
+        lambda _request: httpx.Response(200, json=payload),
+    )
+    try:
+        results = catalog.search("FastAPI authentication", limit=1)
+    finally:
+        client.close()
+
+    assert isinstance(results, list)
+    assert len(results) == 1
+    assert not results.complete
+
+
+def test_explicit_end_of_search_page_marks_full_limit_complete(config):
+    skill = {
+        "id": "acme/skills/fastapi-auth",
+        "name": "FastAPI Auth",
+        "source": "acme/skills",
+        "slug": "fastapi-auth",
+        "installs": 3,
+    }
+    catalog, client = _catalog(
+        config,
+        lambda _request: httpx.Response(200, json={"data": [skill], "hasMore": False}),
+    )
+    try:
+        results = catalog.search("FastAPI authentication", limit=1)
+    finally:
+        client.close()
+
+    assert results.complete
+
+
+def test_invalid_search_completeness_metadata_is_rejected(config):
+    catalog, client = _catalog(
+        config,
+        lambda _request: httpx.Response(200, json={"data": [], "hasMore": "yes"}),
+    )
+    try:
+        with pytest.raises(CatalogDataError, match="hasMore metadata"):
+            catalog.search("FastAPI authentication")
+    finally:
+        client.close()
 
 
 def test_remote_protocol_error_is_treated_as_retryable_transport_error(config):

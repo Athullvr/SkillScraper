@@ -5,8 +5,10 @@ import json
 from typer.testing import CliRunner
 
 from skillscout import cli
-from skillscout.catalog import CatalogUnavailableError
+from skillscout.application import prepare_recommendation
+from skillscout.catalog import CatalogSearchResults, CatalogUnavailableError
 from skillscout.config import Config
+from skillscout.models import Decision, ProjectSnapshot
 from skillscout.ranking import task_is_routine
 
 runner = CliRunner()
@@ -92,5 +94,51 @@ def test_skill_relevant_catalog_failure_stays_operational_error(tmp_path, monkey
 
     assert result.exit_code == 3
     payload = json.loads(result.stdout)
-    assert payload["error"]["code"] == "catalog_error"
+    assert payload["error"]["code"] == "catalog_unavailable"
     assert "decision" not in payload
+
+
+def test_routine_fast_path_does_not_load_catalog_configuration(tmp_path):
+    project = ProjectSnapshot(path=str(tmp_path))
+
+    def fail_config_load():
+        raise AssertionError("routine task must not load catalog configuration")
+
+    report = prepare_recommendation(
+        "Rename a local variable in a Python helper function.",
+        tmp_path,
+        config_loader=fail_config_load,
+        project_context_reader=lambda _path: project,
+    )
+
+    assert report.decision == Decision.NO_SKILL_NEEDED
+
+
+def test_incomplete_empty_catalog_search_returns_review_not_no_skill(tmp_path):
+    project = ProjectSnapshot(path=str(tmp_path))
+
+    class IncompleteCatalog:
+        def __init__(self, _config):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def search(self, _query, *, limit):
+            return CatalogSearchResults([], complete=False)
+
+    report = prepare_recommendation(
+        "Implement FastAPI OAuth login",
+        tmp_path,
+        allow_llm=False,
+        config_loader=_config,
+        project_context_reader=lambda _path: project,
+        catalog_client_factory=IncompleteCatalog,
+    )
+
+    assert report.decision == Decision.REVIEW
+    assert report.candidates == []
+    assert any("more search results" in item for item in report.limitations)
