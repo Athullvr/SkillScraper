@@ -266,12 +266,62 @@ def _explain(
         )
         unresolved.append(relevance_gap)
     elif any(
+        reason.startswith("Not established: task-specific capability could not be confirmed")
+        for reason in decision_reasons
+    ):
+        relevance_status = "not_assessed"
+        relevance_summary = (
+            "Task-specific capability could not be confirmed from SKILL.md; catalog listing overlap alone cannot establish it."
+        )
+        unresolved.append(
+            MCPUnresolvedEvidence(
+                category="task_relevance",
+                status="not_assessed",
+                reason=(
+                    "Detail content did not establish whether the skill documents the requested operation for these task concepts."
+                ),
+                next_steps=[
+                    "Review the candidate's SKILL.md instructions for the requested operation and task concepts.",
+                    "Treat missing or incomplete instructions as unknown; do not infer task fit from the title alone.",
+                ],
+            )
+        )
+    elif any(
+        reason.startswith("Not established: SKILL.md content did not provide")
+        for reason in decision_reasons
+    ):
+        relevance_status = "below_threshold"
+        relevance_summary = (
+            "SKILL.md did not establish the requested operation together with task-specific concepts, so the candidate remains below the relevance threshold."
+        )
+        unresolved.append(
+            MCPUnresolvedEvidence(
+                category="task_relevance",
+                status="below_threshold",
+                reason=(
+                    "The inspected SKILL.md did not establish a task-specific capability, and the candidate did not meet the initial task-relevance threshold."
+                ),
+                next_steps=[
+                    "Until review confirms a direct operation match, continue without this skill.",
+                    "A title or broad topic match alone does not establish task fit.",
+                ],
+            )
+        )
+    elif any(
         "task relevance exceeds the initial recommendation threshold" in reason.lower()
         and not reason.lower().startswith("not established:")
         for reason in decision_reasons
     ):
         relevance_status = "sufficient"
-        relevance_summary = "The existing decision reasons establish task relevance above the current initial threshold."
+        if any(
+            reason == "SKILL.md documents the requested operation together with task concepts."
+            for reason in decision_reasons
+        ):
+            relevance_summary = (
+                "SKILL.md documents the requested operation together with task-specific concepts, and the relevance score exceeds the initial threshold."
+            )
+        else:
+            relevance_summary = "The existing decision reasons establish task relevance above the current initial threshold."
     elif any(
         reason.lower().startswith(
             "not established: task relevance exceeds the initial recommendation threshold"

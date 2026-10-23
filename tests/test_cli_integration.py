@@ -33,7 +33,15 @@ def test_recommend_runs_end_to_end_without_install_or_candidate_execution(tmp_pa
         source=skill.source,
         slug=skill.slug,
         hash="detail-revision-1",
-        files=[SkillFile(path="SKILL.md", contents="# FastAPI OAuth login patterns")],
+        files=[
+            SkillFile(
+                path="SKILL.md",
+                contents=(
+                    "# FastAPI OAuth login patterns\n\n"
+                    "Configure an OAuth login callback and validate tokens in FastAPI."
+                ),
+            )
+        ],
     )
 
     class FakeCatalog:

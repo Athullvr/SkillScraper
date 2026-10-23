@@ -236,7 +236,7 @@ def _inspect_candidate(
     )
     refined = refine_rank(task, ranked, detail)
     llm_failure = False
-    if llm is not None:
+    if llm is not None and refined.capability_supported is True:
         try:
             skill_document = next(
                 (item.contents for item in (detail.files or []) if item.path.lower() == "skill.md"),
@@ -260,6 +260,8 @@ def _inspect_candidate(
                             for reason in assessment.rationale
                         ],
                     ],
+                    listing_score=refined.listing_score,
+                    capability_supported=refined.capability_supported,
                 )
         except LLMError:
             llm_failure = True
@@ -281,6 +283,7 @@ def _inspect_candidate(
         compatibility=compatibility,
         evidence=evidence,
         agent=agent,
+        task_support_confirmed=refined.capability_supported,
     )
     if detail_observer is not None:
         detail_observer(candidate, detail, task, project)

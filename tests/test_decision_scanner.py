@@ -56,18 +56,38 @@ def freeze_decision_clock(monkeypatch):
 def test_current_revision_and_complete_evidence_can_meet_use_policy(monkeypatch):
     freeze_decision_clock(monkeypatch)
     evidence = make_inspection_evidence(
-        detail("# FastAPI authentication skill\nUse OAuth with FastAPI."),
+        detail("# FastAPI authentication skill\nConfigure OAuth with FastAPI."),
         [passing_audit()],
         "available",
         [],
     )
 
-    decision, reasons, _ = decide_candidate(evidence, compatible(), 0.8)
+    decision, reasons, _ = decide_candidate(
+        evidence, compatible(), 0.8, task_support_confirmed=True
+    )
 
     assert decision == Decision.USE
     assert evidence.external_audit_status == "current"
     assert any("exact revision" in reason for reason in reasons)
     assert evidence.local_findings == []
+
+
+def test_topic_overlap_without_documented_capability_cannot_receive_use(monkeypatch):
+    freeze_decision_clock(monkeypatch)
+    evidence = make_inspection_evidence(
+        detail("# FastAPI OAuth login patterns\nAuthentication guidance and examples."),
+        [passing_audit()],
+        "available",
+        [],
+    )
+
+    decision, reasons, limitations = decide_candidate(
+        evidence, compatible(), 0.9, task_support_confirmed=False
+    )
+
+    assert decision == Decision.REVIEW
+    assert any("operation-and-topic match" in reason for reason in reasons)
+    assert any("did not establish the requested task capability" in item for item in limitations)
 
 
 def test_candidate_executable_text_is_scanned_without_execution(tmp_path):

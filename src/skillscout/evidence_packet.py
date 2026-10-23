@@ -14,7 +14,11 @@ from skillscout.mcp_models import (
     MCPTaskEvidencePacket,
 )
 from skillscout.models import CandidateReport, ProjectSnapshot, SkillDetail
-from skillscout.ranking import evidence_excerpt_match
+from skillscout.ranking import (
+    CAPABILITY_LABELS,
+    capability_match_for_excerpt,
+    evidence_excerpt_match,
+)
 
 DEFAULT_EVIDENCE_PACKET_BYTES = 1_200
 MAX_EXCERPT_BYTES = MAX_EVIDENCE_EXCERPT_BYTES
@@ -45,6 +49,7 @@ class _ScoredExcerpt:
     text: str
     task_matches: tuple[str, ...]
     project_matches: tuple[str, ...]
+    capability_groups: tuple[str, ...]
     source_truncated: bool
 
 
@@ -132,6 +137,7 @@ def build_evidence_packet(
                 score, task_matches, project_matches = evidence_excerpt_match(task, project, window)
                 if score <= 0:
                     continue
+                capability_groups, _ = capability_match_for_excerpt(task, window)
                 scored.append(
                     _ScoredExcerpt(
                         score=score,
@@ -144,6 +150,7 @@ def build_evidence_packet(
                         text=window,
                         task_matches=tuple(task_matches),
                         project_matches=tuple(project_matches),
+                        capability_groups=tuple(capability_groups),
                         source_truncated=source_truncated,
                     )
                 )
@@ -196,6 +203,7 @@ def build_evidence_packet(
             score, task_matches, project_matches = evidence_excerpt_match(
                 task, project, excerpt_text
             )
+            capability_groups, _ = capability_match_for_excerpt(task, excerpt_text)
             # A cut that removes every matching term is not useful enough to return.
             if score <= 0 or len(excerpt_text.strip()) < 24:
                 truncated = True
@@ -203,6 +211,7 @@ def build_evidence_packet(
         else:
             task_matches = list(item.task_matches)
             project_matches = list(item.project_matches)
+            capability_groups = list(item.capability_groups)
 
         if not excerpt_text:
             truncated = True
@@ -228,7 +237,9 @@ def build_evidence_packet(
             )
         warnings_truncated = len(warnings) > 10
         warnings = warnings[:10]
-        relevance_reason = _relevance_reason(task_matches, project_matches)
+        relevance_reason = _relevance_reason(
+            task_matches, project_matches, capability_groups
+        )
         excerpt_bytes = len(excerpt_text.encode("utf-8"))
         excerpts.append(
             MCPTaskEvidenceExcerpt(
@@ -389,8 +400,18 @@ def _utf8_prefix(text: str, max_bytes: int) -> str:
     return "".join(result)
 
 
-def _relevance_reason(task_matches: list[str], project_matches: list[str]) -> str:
+def _relevance_reason(
+    task_matches: list[str], project_matches: list[str], capability_groups: list[str]
+) -> str:
     parts: list[str] = []
+    if capability_groups:
+        labels = ", ".join(
+            CAPABILITY_LABELS[group]
+            for group in sorted(capability_groups)
+            if group in CAPABILITY_LABELS
+        )
+        if labels:
+            parts.append(f"{labels} instructions")
     if task_matches:
         parts.append(f"task concepts: {_bounded_terms(task_matches)}")
     if project_matches:

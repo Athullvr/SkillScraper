@@ -151,6 +151,7 @@ def decide_candidate(
     evidence: InspectionEvidence,
     compatibility: Compatibility,
     relevance_score: float,
+    task_support_confirmed: bool | None = None,
 ) -> tuple[Decision, list[str], list[str]]:
     """Apply policy independently of the relevance score and never override a block."""
     reasons: list[str] = []
@@ -224,7 +225,18 @@ def decide_candidate(
         else:
             reasons.append(_failed_check_reason(explanation))
 
-    if all(passed for passed, _ in checks):
+    if task_support_confirmed is True:
+        reasons.append("SKILL.md documents the requested operation together with task concepts.")
+    elif task_support_confirmed is False:
+        reasons.append(
+            "Not established: SKILL.md content did not provide an operation-and-topic match for the requested task."
+        )
+    else:
+        reasons.append(
+            "Not established: task-specific capability could not be confirmed from SKILL.md."
+        )
+
+    if all(passed for passed, _ in checks) and task_support_confirmed is True:
         return Decision.USE, reasons, limitations
     if evidence.evidence_status != "complete":
         limitations.append(
@@ -255,6 +267,14 @@ def decide_candidate(
     ]
     if warnings:
         limitations.append("One or more local heuristic warnings need human review.")
+    if task_support_confirmed is False:
+        limitations.append(
+            "Inspected SKILL.md content did not establish the requested task capability."
+        )
+    elif task_support_confirmed is None:
+        limitations.append(
+            "Task-specific capability remains unknown because supporting SKILL.md evidence was unavailable or insufficient."
+        )
     return Decision.REVIEW, reasons, limitations
 
 
@@ -267,8 +287,11 @@ def build_candidate_report(
     compatibility: Compatibility,
     evidence: InspectionEvidence,
     agent: str,
+    task_support_confirmed: bool | None = None,
 ) -> CandidateReport:
-    decision, reasons, limitations = decide_candidate(evidence, compatibility, relevance_score)
+    decision, reasons, limitations = decide_candidate(
+        evidence, compatibility, relevance_score, task_support_confirmed
+    )
     command = proposed_install_command(skill, agent)
     if not command.startswith("Unavailable:"):
         limitations.append(
@@ -415,7 +438,7 @@ def report_for_candidates(
             project=project,
             decision=Decision.NO_SKILL_NEEDED,
             summary=(
-                "No candidate provided sufficiently demonstrated additional task value; "
+                "No inspected candidate provided enough SKILL.md evidence of the requested operation together with task-specific concepts; "
                 f"the strongest inspected match scored {best.relevance_score:.2f}."
             ),
             candidates=candidates,
@@ -423,6 +446,29 @@ def report_for_candidates(
         )
     decision = best.decision
     summary = f"Best task-fit candidate: {best.skill.name} ({decision.value})."
+    if decision.value == "USE":
+        supported_reason = next(
+            (
+                reason
+                for reason in best.task_fit_rationale
+                if reason.startswith("SKILL.md documents the requested")
+            ),
+            None,
+        )
+        if supported_reason:
+            summary += f" {supported_reason}"
+    elif decision.value == "REVIEW":
+        task_gap = next(
+            (
+                reason
+                for reason in best.decision_reasons
+                if reason.startswith("Not established: task-specific capability")
+                or reason.startswith("Not established: SKILL.md content did not provide")
+            ),
+            None,
+        )
+        if task_gap:
+            summary = f"{best.skill.name} needs review. {task_gap}"
     return Report(
         task=task,
         agent=agent,
