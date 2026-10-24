@@ -6,20 +6,29 @@ SkillScout never installs, activates, imports, or executes candidate files. Prop
 
 ## Install and run
 
-Requires Python 3.12 or newer. Install from a locally built wheel in a virtual environment:
+Requires Python 3.12 or newer. SkillScout is distributed as a wheel by the project; it is not currently published on PyPI. Build a wheel from a checkout, or use a wheel supplied by the project, then install it into a dedicated environment outside the checkout:
 
 ```bash
-uv build --wheel
-python3.12 -m venv .venv
-. .venv/bin/activate
-python -m pip install ./dist/skillscout-0.1.0-py3-none-any.whl
-skillscout doctor
-skillscout recommend "Add Supabase OAuth login to the FastAPI service" --project . --agent codex
-skillscout recommend "Migrate this app from Django to FastAPI" --format json
-skillscout inspect vercel-labs/skills/find-skills
+uv build --wheel --out-dir dist
+python3.12 -m venv "$HOME/.venvs/skillscout"
+"$HOME/.venvs/skillscout/bin/python" -m pip install --upgrade dist/skillscout-0.1.0-py3-none-any.whl
+"$HOME/.venvs/skillscout/bin/skillscout" --version  # SkillScout 0.1.0
+"$HOME/.venvs/skillscout/bin/skillscout" doctor
+"$HOME/.venvs/skillscout/bin/skillscout" recommend "Rename a local variable in a helper function." --format json
 ```
 
-The wheel declares its runtime dependencies and includes the `skillscout` and `skillscout-mcp` commands. The same wheel can be copied to another machine and installed with `python -m pip install /path/to/skillscout-0.1.0-py3-none-any.whl`. Dependency installation needs access to the configured Python package index. SkillScout itself is not published as part of this MVP.
+On Windows, use the equivalent PowerShell commands and the environment's `Scripts` directory:
+
+```powershell
+py -3.12 -m venv "$env:LOCALAPPDATA\SkillScout\venv"
+& "$env:LOCALAPPDATA\SkillScout\venv\Scripts\python.exe" -m pip install --upgrade .\dist\skillscout-0.1.0-py3-none-any.whl
+& "$env:LOCALAPPDATA\SkillScout\venv\Scripts\skillscout.exe" --version
+& "$env:LOCALAPPDATA\SkillScout\venv\Scripts\skillscout.exe" doctor
+```
+
+To upgrade, install the newer supplied wheel into the same environment with `.../python -m pip install --upgrade /path/to/skillscout-VERSION-py3-none-any.whl`, then check `skillscout --version`. The wheel declares its runtime dependencies and both console entry points. Pip may need access to the configured Python package index to install or upgrade dependencies.
+
+`skillscout doctor` and routine `recommend` decisions run locally. `skillscout inspect` and non-routine recommendations need catalog access. To confirm the installed MCP server starts, run `skillscout-mcp` in a terminal: it intentionally writes no startup banner to stdout and waits for an MCP client on stdin; stop this manual check with Ctrl+C. The repeatable stdio handshake and tool-call check is described below.
 
 For development:
 
@@ -30,6 +39,22 @@ uv run pytest
 ```
 
 The standard tests use fixture responses and make no network requests. See [the separate manual catalog demo](docs/manual-catalog-demo.md) for an explicit live request.
+
+After building and installing a wheel into a separate environment, verify its stdio protocol from the development environment with the MCP SDK client:
+
+```bash
+uv run python scripts/mcp_stdio_smoke.py --venv "$HOME/.venvs/skillscout"
+```
+
+The smoke initializes the installed process, checks its public tool schemas, invokes the tools against local fixtures, sends malformed input, and verifies clean EOF shutdown. It makes no catalog request.
+
+The routine and catalog-backed application paths have a separate in-process benchmark using fixed local fixtures:
+
+```bash
+uv run python scripts/benchmark_paths.py
+```
+
+It reports sample counts and latency percentiles; catalog-fixture timings are not network latency. See the [release readiness report](docs/release-readiness-2026-10-24.md) for the recorded baseline and integration results.
 
 ## Commands
 
@@ -57,7 +82,7 @@ Checks the Python version and local configuration. It does not contact the catal
 
 SkillScout also exposes a local MCP server for compatible coding agents. Its tools call the same application workflows as the CLI and return validated, versioned structured results, so the agent does not need to parse Rich terminal output. MCP adds structured evidence gaps and a small task-scoped excerpt packet for agent consumption; it does not change ranking or decision policy.
 
-Install the wheel in an environment visible to your MCP host, then register the stdio server. The dedicated `skillscout-mcp` command starts the same server as `skillscout mcp`; both use the installed package and work from any current directory.
+Install the wheel in an environment visible to your MCP host, then register the stdio server. The dedicated `skillscout-mcp` command starts the same server as `skillscout mcp`; both use the installed package and work from any current directory. Starting the server manually is expected to wait silently for a client: MCP protocol messages use stdout, while diagnostics use stderr. Do not add a shell wrapper that prints a banner to stdout.
 
 ```bash
 skillscout doctor

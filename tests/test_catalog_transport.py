@@ -184,6 +184,27 @@ def test_read_timeout_retries_only_within_configured_bound(config):
     assert delays == [0.25, 0.5]
 
 
+def test_connection_failure_retries_only_within_configured_bound(config):
+    requests = 0
+    delays: list[float] = []
+
+    def handler(request):
+        nonlocal requests
+        requests += 1
+        raise httpx.ConnectError("connection refused", request=request)
+
+    catalog, client = _catalog(config, handler, delays)
+    try:
+        with pytest.raises(CatalogUnavailableError, match="bounded retries") as error:
+            catalog.search("FastAPI authentication")
+    finally:
+        client.close()
+
+    assert "connection refused" not in str(error.value)
+    assert requests == config.retry_count + 1
+    assert delays == [0.25, 0.5]
+
+
 @pytest.mark.parametrize("status_code", [429, 500, 503])
 def test_rate_limits_and_server_errors_have_bounded_retries(config, status_code):
     requests = 0
