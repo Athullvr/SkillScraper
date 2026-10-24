@@ -28,6 +28,7 @@ dev = [
 [project.scripts]
 skillscout = "skillscout.entrypoint:cli_main"
 skillscout-mcp = "skillscout.mcp_entrypoint:main"
+skillscout-codex-hook = "skillscout.codex_hook_entrypoint:main"
 
 [build-system]
 requires = ["hatchling>=1.24,<2.0"]

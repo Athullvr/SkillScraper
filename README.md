@@ -46,7 +46,7 @@ After building and installing a wheel into a separate environment, verify its st
 uv run python scripts/mcp_stdio_smoke.py --venv "$HOME/.venvs/skillscout"
 ```
 
-The smoke initializes the installed process, checks its public tool schemas, invokes the tools against local fixtures, sends malformed input, and verifies clean EOF shutdown. It makes no catalog request.
+The smoke initializes the installed process, checks its public tool schemas, invokes the tools against local fixtures, sends malformed input, and verifies clean EOF shutdown. It also sends a documented synthetic event to the installed Codex hook entry point. This is a hook fixture check, not a Codex application session. It makes no catalog request.
 
 The routine and catalog-backed application paths have a separate in-process benchmark using fixed local fixtures:
 
@@ -54,7 +54,7 @@ The routine and catalog-backed application paths have a separate in-process benc
 uv run python scripts/benchmark_paths.py
 ```
 
-It reports sample counts and latency percentiles; catalog-fixture timings are not network latency. See the [release readiness report](docs/release-readiness-2026-10-24.md) for the recorded baseline and integration results.
+It reports sample counts and latency percentiles; catalog-fixture timings are not network latency. See the [release readiness report](docs/release-readiness-2026-10-24.md) and the [Codex distribution and integration follow-up](docs/public-distribution-2026-10-24.md) for the recorded baseline and integration results.
 
 ## Commands
 
@@ -107,10 +107,46 @@ Codex CLI can use the same installed command through `~/.codex/config.toml` (see
 
 ```toml
 [mcp_servers.skillscout]
-command = "skillscout-mcp"
+command = "/absolute/path/to/venv/bin/skillscout-mcp"
 ```
 
 Registration makes the tools available but does not guarantee that the host will call them. To make skill selection consistent, add a host instruction such as: “Before choosing a specialist coding skill, call SkillScout `prepare_task` with the task and project path. Treat its result as evidence, and follow your own safety rules.” SkillScout does not edit agent configuration. The JSON/TOML blocks above are examples to copy into the client configuration you choose; SkillScout does not modify global or project client settings.
+
+### Optional automatic routing for Codex CLI
+
+Codex provides a `UserPromptSubmit` hook that receives the submitted prompt before the model turn and can add developer context. SkillScout installs an opt-in `skillscout-codex-hook` command for this event. It calls the same recommendation workflow as `prepare_task`; it does not change ranking, install skills, or execute skill instructions. See the official [Codex hooks guide](https://developers.openai.com/codex/hooks) for event behavior and trust controls.
+
+Add this event to `~/.codex/hooks.json` (or the project's `.codex/hooks.json`) and replace the command with the absolute path from the SkillScout environment. If the file already has a `hooks` object, merge the `UserPromptSubmit` entry into it instead of replacing the file:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/venv/bin/skillscout-codex-hook",
+            "timeout": 60,
+            "statusMessage": "Checking task with SkillScout"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+On Windows, use the absolute `Scripts\\skillscout-codex-hook.exe` path. `UserPromptSubmit` has no matcher, so Codex runs this hook for every submitted prompt. Review and trust the hook through Codex's `/hooks` interface; SkillScout never edits client configuration or bypasses Codex trust. The hook adds context to the model but cannot guarantee that the model follows it. Disable the integration by removing the entry from the client configuration.
+
+Routine prompts such as simple renames remain local. Other prompts are assessed through SkillScout's existing workflow, which sends the redacted task query to the catalog; heuristic redaction may miss secrets, so do not enable the hook for prompts containing sensitive task text. The hook does not use the optional LLM. Each catalog request is capped at four seconds with retries disabled; a multi-candidate check can take longer, and the hook has a 60-second host timeout. Missing credentials, catalog failures, invalid input, and incomplete evidence become `REVIEW`, never `NO_SKILL_NEEDED`.
+
+The hook handles decisions as follows:
+
+- `NO_SKILL_NEEDED`: continue with the normal coding workflow; this is not a safety assessment.
+- `USE`: a candidate may help; check fit, compatibility, and safety before relying on it. Installation remains a separate user decision.
+- `REVIEW`: evidence is unresolved. It is not approval or a safety pass; use normal capabilities or ask the user.
+- `AVOID`: do not use the flagged candidate. The task can still be completed through another safe method.
 
 The server exposes three read-only tools:
 

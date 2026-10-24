@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -51,6 +52,46 @@ def _safe_environment(venv: Path, *, catalog_token: str | None = None) -> dict[s
     if catalog_token is not None:
         environment["SKILLSCOUT_CATALOG_TOKEN"] = catalog_token
     return environment
+
+
+def _codex_hook_check(command: Path, cwd: Path, environment: dict[str, str]) -> dict[str, Any]:
+    """Exercise the installed Codex hook using a documented event fixture."""
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Rename a local variable in a Python helper function.",
+        "cwd": str(cwd),
+        "session_id": "synthetic-session",
+    }
+    hook_environment = dict(environment)
+    # A routine task must not parse catalog configuration or contact transport.
+    hook_environment["SKILLSCOUT_CANDIDATE_LIMIT"] = "invalid"
+    completed = subprocess.run(
+        [str(command)],
+        input=json.dumps(event),
+        text=True,
+        capture_output=True,
+        cwd=cwd,
+        env=hook_environment,
+        timeout=10,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"installed Codex hook exited with status {completed.returncode}")
+    if completed.stderr:
+        raise RuntimeError("installed Codex hook wrote unexpected diagnostics to stderr")
+    try:
+        response = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("installed Codex hook did not emit valid JSON") from exc
+    output = response.get("hookSpecificOutput")
+    if not isinstance(output, dict) or output.get("hookEventName") != "UserPromptSubmit":
+        raise RuntimeError("installed Codex hook returned an invalid hook response")
+    context = output.get("additionalContext")
+    if not isinstance(context, str) or "NO_SKILL_NEEDED" not in context:
+        raise RuntimeError("routine Codex hook event did not return NO_SKILL_NEEDED")
+    if SECRET_MARKER in completed.stdout:
+        raise RuntimeError("installed Codex hook echoed a secret marker")
+    return {"routine_decision": "NO_SKILL_NEEDED", "stderr_bytes": 0, "config_read": False}
 
 
 def _tool_schema(tools: list[Any]) -> dict[str, dict[str, Any]]:
@@ -167,6 +208,18 @@ async def _sdk_session(
                         != "catalog_credentials_missing"
                     ):
                         raise RuntimeError("fixture missing-credential failure was not classified")
+                    missing_message = missing_credential.get("error", {}).get("message", "")
+                    if not all(
+                        name in missing_message
+                        for name in ("VERCEL_OIDC_TOKEN", "SKILLSCOUT_CATALOG_TOKEN")
+                    ):
+                        raise RuntimeError("missing-credential error did not name its corrective action")
+                    if (
+                        missing_credential.get("decision") is not None
+                        or "no inspection decision is available"
+                        not in missing_credential.get("next_action", "")
+                    ):
+                        raise RuntimeError("missing-credential result did not preserve uncertainty")
                     if SECRET_MARKER in json.dumps(
                         [prepared, inspected, sanitized_failure, missing_credential, doctor]
                     ):
@@ -182,6 +235,7 @@ async def _sdk_session(
                             "fixture_inspection_decision": inspected["decision"],
                             "sanitized_failure": sanitized_failure["error"]["code"],
                             "missing_credential_error": missing_credential["error"]["code"],
+                            "missing_credential_next_step": "configure an authorized catalog credential",
                             "doctor_after_fixture_error": doctor_after_failure["status"],
                         }
                     )
@@ -389,7 +443,8 @@ async def _run(venv: Path, timeout: float) -> dict[str, Any]:
     python = scripts / ("python.exe" if os.name == "nt" else "python")
     server = scripts / ("skillscout-mcp.exe" if os.name == "nt" else "skillscout-mcp")
     cli = scripts / ("skillscout.exe" if os.name == "nt" else "skillscout")
-    if not python.is_file() or not server.is_file() or not cli.is_file():
+    hook = scripts / ("skillscout-codex-hook.exe" if os.name == "nt" else "skillscout-codex-hook")
+    if not python.is_file() or not server.is_file() or not cli.is_file() or not hook.is_file():
         raise RuntimeError("the supplied environment is missing installed SkillScout entry points")
 
     with tempfile.TemporaryDirectory(prefix="skillscout-mcp-smoke-") as directory:
@@ -421,7 +476,13 @@ async def _run(venv: Path, timeout: float) -> dict[str, Any]:
             _raw_protocol_check(python, cwd, clean_env, timeout=min(timeout, 10)),
             timeout=timeout,
         )
-    return {"installed_entrypoint": normal, "fixture_backed_tools": fixture, "raw_protocol": raw}
+        hook_result = _codex_hook_check(hook, cwd, clean_env)
+    return {
+        "installed_entrypoint": normal,
+        "fixture_backed_tools": fixture,
+        "raw_protocol": raw,
+        "codex_hook_fixture": hook_result,
+    }
 
 
 def main() -> int:
