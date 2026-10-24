@@ -97,6 +97,8 @@ def _run_calibration_review(args: argparse.Namespace) -> int:
             "example_id": example["id"],
             "split": example["split"],
             "challenge_category": example["challenge_category"],
+            "assessment_status": example["assessment_status"],
+            "label_provenance": example["label_provenance"],
             "task": example["task"],
             "project_facts": example["project_facts"],
             "search": {

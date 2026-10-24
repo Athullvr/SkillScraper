@@ -502,9 +502,19 @@ def render_run_report(run: Mapping[str, Any]) -> str:
         "",
     ]
     lines.extend(_format_metric_group(groups["human_reviewed_development"], "Human-reviewed development"))
+    if counts["human_reviewed_development_judgeable"] == 0:
+        lines.append(
+            "No genuine human-reviewed development labels are available; this run contains no "
+            "recommendation-quality measurement for that group."
+        )
     lines.extend(["", "## Human-reviewed held-out results", ""])
     if include_held_out:
         lines.extend(_format_metric_group(groups["human_reviewed_held_out"], "Human-reviewed held-out"))
+        if counts["human_reviewed_held_out_judgeable"] == 0:
+            lines.append(
+                "No genuine human-reviewed held-out labels are available; "
+                "no held-out quality measurement exists."
+            )
         lines.append("Held-out examples were explicitly included in this report. Keep these results out of threshold and vocabulary selection.")
     else:
         lines.append(
@@ -608,6 +618,22 @@ def render_comparison_report(comparison: Mapping[str, Any]) -> str:
             lines.append("Held-out metrics were excluded from both runs.")
             lines.append("")
             continue
+        if name == "human_reviewed_development" and (
+            group["accuracy"]["baseline_denominator"] == 0
+            and group["accuracy"]["candidate_denominator"] == 0
+        ):
+            lines.append(
+                "No genuine human-reviewed development labels are present; "
+                "this comparison has no recommendation-quality result."
+            )
+        elif name == "human_reviewed_held_out" and (
+            group["accuracy"]["baseline_denominator"] == 0
+            and group["accuracy"]["candidate_denominator"] == 0
+        ):
+            lines.append(
+                "No genuine human-reviewed held-out labels are present; "
+                "no held-out quality result exists."
+            )
         lines.extend(
             [
                 _format_delta("Decision accuracy", group["accuracy"]),

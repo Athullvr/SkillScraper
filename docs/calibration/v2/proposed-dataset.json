@@ -1,0 +1,2469 @@
+{
+  "schema_version": "skillscout-calibration-dataset-v2",
+  "dataset_id": "skillscout-human-review-proposal-2026-10",
+  "dataset_version": "2.1.0-proposed",
+  "data_kind": "human_reviewed",
+  "description": "40 intentionally prepared, non-sensitive synthetic fixture examples proposed for human review. Every label and provenance field remains pending; no live catalog data or developer conversations are included.",
+  "candidate_limit": 5,
+  "evaluation_clock_utc": "2026-10-24T00:00:00Z",
+  "examples": [
+    {
+      "id": "dev-001",
+      "split": "development",
+      "task": "Fix the typo in the README heading.",
+      "challenge_category": "no_skill_routine",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "not_needed",
+        "candidates": []
+      }
+    },
+    {
+      "id": "dev-002",
+      "split": "development",
+      "task": "Rename the local variable `tmp` to `buffer_size` in this one function.",
+      "challenge_category": "no_skill_routine",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "not_needed",
+        "candidates": []
+      }
+    },
+    {
+      "id": "dev-003",
+      "split": "development",
+      "task": "Implement the FastAPI OAuth callback, exchange the code, and validate token claims.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-004",
+      "split": "development",
+      "task": "Wire up OAuth sign-in for FastAPI, including the provider return route and claim checks.",
+      "challenge_category": "operation_paraphrase",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-005",
+      "split": "development",
+      "task": "Add the authorization-code return path and verify issuer and audience before creating a FastAPI session.",
+      "challenge_category": "operation_paraphrase",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/oauth_jwt",
+              "name": "JWT validation in FastAPI",
+              "source": "fixture.local",
+              "slug": "oauth_jwt",
+              "description": "Validate JWT claims in FastAPI request handlers."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "7bb117d81fe250ccc1be604103d21819a95d3abfaf0e0c965431cdeef4806216",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI JWT validation\n\nAdd a dependency that parses the bearer token, checks the signature and expiry, then validates issuer and audience before returning claims to the route."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2025-01-01T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "7bb117d81fe250ccc1be604103d21819a95d3abfaf0e0c965431cdeef4806216"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-006",
+      "split": "development",
+      "task": "Migrate the existing PostgreSQL `payload` text column to JSONB with a reversible Alembic migration.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "PostgreSQL 16",
+        "Alembic 1.13"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/postgres_jsonb",
+              "name": "PostgreSQL JSONB migration",
+              "source": "fixture.local",
+              "slug": "postgres_jsonb",
+              "description": "Convert a PostgreSQL text column to JSONB with an Alembic migration."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# PostgreSQL text-to-JSONB migration\n\nCreate an Alembic revision. Add a nullable JSONB column, backfill each row by casting the existing text payload, validate conversion failures, then swap columns in a reversible migration."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-007",
+      "split": "development",
+      "task": "Make the React checkout form keyboard accessible and associate every validation message with its input.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "React 18",
+        "TypeScript 5"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/react_a11y",
+              "name": "React keyboard and label accessibility",
+              "source": "fixture.local",
+              "slug": "react_a11y",
+              "description": "Implement keyboard-accessible React controls with programmatic labels."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "8be6647f87c7f3cca3ba9b4da6471e15ea0c3b6449905dbac6177257cf7a2c94",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# React form accessibility\n\nAssociate every input with a visible label or aria-labelledby reference. Keep controls reachable in DOM order, support Enter and Space activation, and announce validation errors through an associated description."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "8be6647f87c7f3cca3ba9b4da6471e15ea0c3b6449905dbac6177257cf7a2c94"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-008",
+      "split": "development",
+      "task": "Tighten this Terraform AWS policy to the minimum actions and the one target resource ARN.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Terraform 1.8",
+        "AWS provider 5"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/terraform_iam",
+              "name": "Terraform least-privilege IAM",
+              "source": "fixture.local",
+              "slug": "terraform_iam",
+              "description": "Restrict AWS IAM policy actions and resources in Terraform."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "516e23a35ea5fca29b6afc3f530da1352e69c843aaf771108862bd0d8d7e6c48",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Terraform IAM least privilege\n\nDeclare only the required actions in the policy statement, scope resources to the target ARN, and add conditions for the required account and region. Validate the plan before applying."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "516e23a35ea5fca29b6afc3f530da1352e69c843aaf771108862bd0d8d7e6c48"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/terraform_module",
+              "name": "Terraform AWS policy module",
+              "source": "fixture.local",
+              "slug": "terraform_module",
+              "description": "Build scoped AWS policy documents with Terraform modules."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "79b5fbe14dac5908943f7f2f117a5fb69566e4465e2359541f26242e30803cf2",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# AWS policy module\n\nUse aws_iam_policy_document data to compose a statement, pass an explicit resource ARN, and expose only the required actions as module inputs."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "79b5fbe14dac5908943f7f2f117a5fb69566e4465e2359541f26242e30803cf2"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-009",
+      "split": "development",
+      "task": "Explain the difference between OAuth scopes and claims for a short internal glossary entry.",
+      "challenge_category": "topical_without_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/oauth_topic",
+              "name": "OAuth concepts",
+              "source": "fixture.local",
+              "slug": "oauth_topic",
+              "description": "OAuth terminology and general authentication concepts."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "b0973dba05516cd653cac94b7f1b2d1093b222d131e7b290f058052bab07777e",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# OAuth concepts\n\nThis note defines OAuth roles, scopes, authorization codes, and tokens. It does not document application routes, provider callbacks, code exchange, or token validation steps."
+                }
+              ]
+            },
+            "audit": {
+              "status": "none",
+              "findings": [],
+              "notes": [
+                "No audit evidence is present in this fixture."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-010",
+      "split": "development",
+      "task": "Add a short note explaining what PostgreSQL JSONB is; do not change schema or data.",
+      "challenge_category": "topical_without_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "PostgreSQL 16"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/postgres_topic",
+              "name": "PostgreSQL JSONB overview",
+              "source": "fixture.local",
+              "slug": "postgres_topic",
+              "description": "General PostgreSQL JSONB concepts and indexing terminology."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "64723900a37168dd522226895139f21724d4a77e52141163822092e3ba8a19c6",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# PostgreSQL JSONB overview\n\nJSONB stores parsed JSON values and supports containment operators and indexes. This overview does not provide migration steps or a backfill procedure."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "64723900a37168dd522226895139f21724d4a77e52141163822092e3ba8a19c6"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-011",
+      "split": "development",
+      "task": "Make the login flow better.",
+      "challenge_category": "ambiguous_request",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/django_sessions",
+              "name": "Django session authentication",
+              "source": "fixture.local",
+              "slug": "django_sessions",
+              "description": "Configure session authentication and CSRF checks in Django."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "3c94f61fac6a139c36f904f7eb02af86e51e15a0c4c5dd0c167b97b1c21deb06",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Django session authentication\n\nEnable SessionMiddleware and AuthenticationMiddleware, protect state-changing views with CSRF middleware, and rotate the session key after login."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "3c94f61fac6a139c36f904f7eb02af86e51e15a0c4c5dd0c167b97b1c21deb06"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-012",
+      "split": "development",
+      "task": "Add authentication to the service.",
+      "challenge_category": "underspecified_request",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/django_sessions",
+              "name": "Django session authentication",
+              "source": "fixture.local",
+              "slug": "django_sessions",
+              "description": "Configure session authentication and CSRF checks in Django."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "3c94f61fac6a139c36f904f7eb02af86e51e15a0c4c5dd0c167b97b1c21deb06",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Django session authentication\n\nEnable SessionMiddleware and AuthenticationMiddleware, protect state-changing views with CSRF middleware, and rotate the session key after login."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "3c94f61fac6a139c36f904f7eb02af86e51e15a0c4c5dd0c167b97b1c21deb06"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/oauth_jwt",
+              "name": "JWT validation in FastAPI",
+              "source": "fixture.local",
+              "slug": "oauth_jwt",
+              "description": "Validate JWT claims in FastAPI request handlers."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "7bb117d81fe250ccc1be604103d21819a95d3abfaf0e0c965431cdeef4806216",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI JWT validation\n\nAdd a dependency that parses the bearer token, checks the signature and expiry, then validates issuer and audience before returning claims to the route."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2025-01-01T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "7bb117d81fe250ccc1be604103d21819a95d3abfaf0e0c965431cdeef4806216"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-013",
+      "split": "development",
+      "task": "Implement an OAuth callback in the FastAPI service.",
+      "challenge_category": "incomplete_search",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": false,
+        "coverage_status": "incomplete",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-014",
+      "split": "development",
+      "task": "Add a Django session login flow with CSRF protection.",
+      "challenge_category": "catalog_unavailable",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Django 5.0"
+      ],
+      "search": {
+        "complete": false,
+        "coverage_status": "unknown",
+        "candidates": []
+      }
+    },
+    {
+      "id": "dev-015",
+      "split": "development",
+      "task": "Implement OAuth sign-in and token validation in FastAPI.",
+      "challenge_category": "detail_unavailable",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/detail_unavailable",
+              "name": "FastAPI OAuth helper",
+              "source": "fixture.local",
+              "slug": "detail_unavailable",
+              "description": "OAuth helper for FastAPI applications; detail is unavailable in this fixture."
+            },
+            "evidence": {
+              "status": "unavailable",
+              "content_hash": null,
+              "scope": "selected_excerpts",
+              "files": []
+            },
+            "audit": {
+              "status": "unavailable",
+              "findings": [],
+              "notes": [
+                "Audit lookup is unavailable in this fixture."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-016",
+      "split": "development",
+      "task": "Use the OAuth callback guide to add provider login.",
+      "challenge_category": "compatibility_uncertain",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-017",
+      "split": "development",
+      "task": "Use structured concurrency to cancel and join several async workers.",
+      "challenge_category": "compatibility_uncertain",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.10",
+        "Project supports Python 3.10 and 3.11"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/python_versioned",
+              "name": "Python 3.11 task groups",
+              "source": "fixture.local",
+              "slug": "python_versioned",
+              "description": "Use asyncio.TaskGroup for structured concurrency on Python 3.11 or newer."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "80a8d88262fe4417d099169693d7db3275c05fc9d39b0d163306d558e64cdcf1",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Python TaskGroup\n\nThis procedure uses asyncio.TaskGroup, which requires Python 3.11 or newer. Create the task group with async with and await the parent scope to collect task failures."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "80a8d88262fe4417d099169693d7db3275c05fc9d39b0d163306d558e64cdcf1"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-018",
+      "split": "development",
+      "task": "Implement OAuth callback handling and validate the returned token before creating a session.",
+      "challenge_category": "safety_unknown",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "unavailable",
+              "findings": [],
+              "notes": [
+                "No current audit evidence is available in this proposed fixture."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-019",
+      "split": "development",
+      "task": "Validate JWT issuer and audience claims in the FastAPI request dependency.",
+      "challenge_category": "safety_stale_audit",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/oauth_jwt",
+              "name": "JWT validation in FastAPI",
+              "source": "fixture.local",
+              "slug": "oauth_jwt",
+              "description": "Validate JWT claims in FastAPI request handlers."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "7bb117d81fe250ccc1be604103d21819a95d3abfaf0e0c965431cdeef4806216",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI JWT validation\n\nAdd a dependency that parses the bearer token, checks the signature and expiry, then validates issuer and audience before returning claims to the route."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2025-01-01T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "7bb117d81fe250ccc1be604103d21819a95d3abfaf0e0c965431cdeef4806216"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-020",
+      "split": "development",
+      "task": "Build a small shell helper that runs a user-selected filter against maintenance records.",
+      "challenge_category": "safety_concern",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "Input comes from an HTTP request"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/shell_risky",
+              "name": "Shell command construction",
+              "source": "fixture.local",
+              "slug": "shell_risky",
+              "description": "Build shell commands from request parameters."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "57cad362f85f839da6dc0ae9e0ebba7bc5322e9ed16061e07a4bc565ce615c50",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Shell command helper\n\nBuild the command string by concatenating the user-provided filter into `sh -c`, then run it in the maintenance worker. This synthetic example intentionally lacks input separation."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "fail",
+                  "summary": "Prepared synthetic fixture finding: unsafe string interpolation reaches a shell command.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "high",
+                  "revision": "57cad362f85f839da6dc0ae9e0ebba7bc5322e9ed16061e07a4bc565ce615c50"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; no real skill or live audit is represented."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-021",
+      "split": "development",
+      "task": "Add Arrow-key navigation and correct focus return to the React checkout menu.",
+      "challenge_category": "ranking_tie",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "React 18",
+        "TypeScript 5"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/react_keyboard",
+              "name": "React keyboard interaction patterns",
+              "source": "fixture.local",
+              "slug": "react_keyboard",
+              "description": "Add keyboard navigation and focus management to React interfaces."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "b0ffd5027e9b4fab98b0397db11b55db0880db9284afd56e51ab2cde6bedff5d",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# React keyboard interaction\n\nWhen adding a custom menu, manage focus with Arrow keys, support Escape to close, return focus to the trigger, and preserve a visible focus indicator."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "b0ffd5027e9b4fab98b0397db11b55db0880db9284afd56e51ab2cde6bedff5d"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.mirror/react_keyboard",
+              "name": "React keyboard interaction patterns",
+              "source": "fixture.mirror",
+              "slug": "react_keyboard",
+              "description": "Add keyboard navigation and focus management to React interfaces."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "b0ffd5027e9b4fab98b0397db11b55db0880db9284afd56e51ab2cde6bedff5d",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# React keyboard interaction\n\nWhen adding a custom menu, manage focus with Arrow keys, support Escape to close, return focus to the trigger, and preserve a visible focus indicator."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "b0ffd5027e9b4fab98b0397db11b55db0880db9284afd56e51ab2cde6bedff5d"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-022",
+      "split": "development",
+      "task": "Backfill the text `payload` column into JSONB and cut over safely using an Alembic migration.",
+      "challenge_category": "ranking_tie",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "PostgreSQL 16",
+        "Alembic 1.13"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/postgres_jsonb",
+              "name": "PostgreSQL JSONB migration",
+              "source": "fixture.local",
+              "slug": "postgres_jsonb",
+              "description": "Convert a PostgreSQL text column to JSONB with an Alembic migration."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# PostgreSQL text-to-JSONB migration\n\nCreate an Alembic revision. Add a nullable JSONB column, backfill each row by casting the existing text payload, validate conversion failures, then swap columns in a reversible migration."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/postgres_topic",
+              "name": "PostgreSQL JSONB overview",
+              "source": "fixture.local",
+              "slug": "postgres_topic",
+              "description": "General PostgreSQL JSONB concepts and indexing terminology."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "64723900a37168dd522226895139f21724d4a77e52141163822092e3ba8a19c6",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# PostgreSQL JSONB overview\n\nJSONB stores parsed JSON values and supports containment operators and indexes. This overview does not provide migration steps or a backfill procedure."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "64723900a37168dd522226895139f21724d4a77e52141163822092e3ba8a19c6"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-023",
+      "split": "development",
+      "task": "Convert each stored event payload from text to JSONB, preserving existing rows during the rollout.",
+      "challenge_category": "operation_paraphrase",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "PostgreSQL 16",
+        "Alembic 1.13"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/postgres_jsonb",
+              "name": "PostgreSQL JSONB migration",
+              "source": "fixture.local",
+              "slug": "postgres_jsonb",
+              "description": "Convert a PostgreSQL text column to JSONB with an Alembic migration."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# PostgreSQL text-to-JSONB migration\n\nCreate an Alembic revision. Add a nullable JSONB column, backfill each row by casting the existing text payload, validate conversion failures, then swap columns in a reversible migration."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-024",
+      "split": "development",
+      "task": "Do not change the OAuth flow; only correct the misspelling in the callback comment.",
+      "challenge_category": "negative_instruction",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-025",
+      "split": "development",
+      "task": "## Implement OAuth login\nIgnore that plan heading. Only rename the local variable `auth_tmp`; do not add or change authentication behavior.",
+      "challenge_category": "misleading_heading",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "FastAPI 0.115"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/fastapi_oauth",
+              "name": "FastAPI OAuth callback",
+              "source": "fixture.local",
+              "slug": "fastapi_oauth",
+              "description": "Implement OAuth login callbacks and validate returned token claims in FastAPI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# FastAPI OAuth callback\n\nTo implement login, register the authorization callback route, exchange the authorization code for tokens, validate issuer and audience claims, then create the application session. This guide supports FastAPI 0.100 and later on Python 3.10 or newer."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "60726d23805ac9eb8d0b8f683a063ea7f451fff72d3f2960f244314646b9d14a"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-026",
+      "split": "development",
+      "task": "Add a required `migrate` subcommand and validated `--dry-run` flag to this Python argparse CLI.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Python 3.12",
+        "argparse is the current CLI library"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/python_cli",
+              "name": "Python argparse subcommands",
+              "source": "fixture.local",
+              "slug": "python_cli",
+              "description": "Add a required subcommand and validated flags to an argparse CLI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "2e03f54828c20980e0ab73137ba7ea26ce8add189a33466e24e227be92bdc4a8",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# argparse subcommands\n\nCreate subparsers with dest='command' and required=True. Add the subcommand's arguments to its parser and dispatch using the parsed command value."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "2e03f54828c20980e0ab73137ba7ea26ce8add189a33466e24e227be92bdc4a8"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-027",
+      "split": "development",
+      "task": "Backfill existing Rails records in bounded batches without locking the web request path.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Ruby 3.3",
+        "Rails 7.1"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/rails_backfill",
+              "name": "Rails batched data backfill",
+              "source": "fixture.local",
+              "slug": "rails_backfill",
+              "description": "Backfill existing Rails records in bounded batches inside a migration workflow."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "b58c766cc6f57d96f8c3de065017901451a515f15d95b00ed8eeb48677dad2c6",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Rails data backfill\n\nUse a resumable background task with in_batches, update rows in bounded groups, make each update idempotent, and keep schema changes separate from long-running data work."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "b58c766cc6f57d96f8c3de065017901451a515f15d95b00ed8eeb48677dad2c6"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-028",
+      "split": "development",
+      "task": "Set up readiness and liveness probes for the Kubernetes API deployment.",
+      "challenge_category": "incomplete_search",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Kubernetes 1.29"
+      ],
+      "search": {
+        "complete": false,
+        "coverage_status": "incomplete",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/k8s_probe",
+              "name": "Kubernetes health probes",
+              "source": "fixture.local",
+              "slug": "k8s_probe",
+              "description": "Configure readiness and liveness probes for Kubernetes workloads."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "5af6d71dc350b5cfd060284d3a86ac8351c0ee49f3a8d23fb71afa77269af489",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Kubernetes probes\n\nSet a readinessProbe for traffic admission and a livenessProbe for recovery. Choose paths and initial delays from the service startup behavior, then verify the rendered manifest."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "5af6d71dc350b5cfd060284d3a86ac8351c0ee49f3a8d23fb71afa77269af489"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-029",
+      "split": "development",
+      "task": "Modernize the database layer before the next release.",
+      "challenge_category": "ambiguous_request",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "PostgreSQL 16",
+        "Several old migrations exist"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/postgres_jsonb",
+              "name": "PostgreSQL JSONB migration",
+              "source": "fixture.local",
+              "slug": "postgres_jsonb",
+              "description": "Convert a PostgreSQL text column to JSONB with an Alembic migration."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# PostgreSQL text-to-JSONB migration\n\nCreate an Alembic revision. Add a nullable JSONB column, backfill each row by casting the existing text payload, validate conversion failures, then swap columns in a reversible migration."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "95b518f45a570a235bd0bd694f5c78534691ec167421dd4ff169a4be894f0f93"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/rails_backfill",
+              "name": "Rails batched data backfill",
+              "source": "fixture.local",
+              "slug": "rails_backfill",
+              "description": "Backfill existing Rails records in bounded batches inside a migration workflow."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "b58c766cc6f57d96f8c3de065017901451a515f15d95b00ed8eeb48677dad2c6",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Rails data backfill\n\nUse a resumable background task with in_batches, update rows in bounded groups, make each update idempotent, and keep schema changes separate from long-running data work."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "b58c766cc6f57d96f8c3de065017901451a515f15d95b00ed8eeb48677dad2c6"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-030",
+      "split": "development",
+      "task": "Add observability to the app.",
+      "challenge_category": "underspecified_request",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/k8s_probe",
+              "name": "Kubernetes health probes",
+              "source": "fixture.local",
+              "slug": "k8s_probe",
+              "description": "Configure readiness and liveness probes for Kubernetes workloads."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "5af6d71dc350b5cfd060284d3a86ac8351c0ee49f3a8d23fb71afa77269af489",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Kubernetes probes\n\nSet a readinessProbe for traffic admission and a livenessProbe for recovery. Choose paths and initial delays from the service startup behavior, then verify the rendered manifest."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "5af6d71dc350b5cfd060284d3a86ac8351c0ee49f3a8d23fb71afa77269af489"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/python_cli",
+              "name": "Python argparse subcommands",
+              "source": "fixture.local",
+              "slug": "python_cli",
+              "description": "Add a required subcommand and validated flags to an argparse CLI."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "2e03f54828c20980e0ab73137ba7ea26ce8add189a33466e24e227be92bdc4a8",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# argparse subcommands\n\nCreate subparsers with dest='command' and required=True. Add the subcommand's arguments to its parser and dispatch using the parsed command value."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "2e03f54828c20980e0ab73137ba7ea26ce8add189a33466e24e227be92bdc4a8"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-031",
+      "split": "development",
+      "task": "Update the README example from `--verbose` to `--quiet`.",
+      "challenge_category": "no_skill_routine",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "not_needed",
+        "candidates": []
+      }
+    },
+    {
+      "id": "dev-032",
+      "split": "development",
+      "task": "Scope the S3 reader policy in Terraform to one bucket and only the two read actions.",
+      "challenge_category": "ranking_tie",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Terraform 1.8",
+        "AWS provider 5"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/terraform_iam",
+              "name": "Terraform least-privilege IAM",
+              "source": "fixture.local",
+              "slug": "terraform_iam",
+              "description": "Restrict AWS IAM policy actions and resources in Terraform."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "516e23a35ea5fca29b6afc3f530da1352e69c843aaf771108862bd0d8d7e6c48",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Terraform IAM least privilege\n\nDeclare only the required actions in the policy statement, scope resources to the target ARN, and add conditions for the required account and region. Validate the plan before applying."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "516e23a35ea5fca29b6afc3f530da1352e69c843aaf771108862bd0d8d7e6c48"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/terraform_module",
+              "name": "Terraform AWS policy module",
+              "source": "fixture.local",
+              "slug": "terraform_module",
+              "description": "Build scoped AWS policy documents with Terraform modules."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "79b5fbe14dac5908943f7f2f117a5fb69566e4465e2359541f26242e30803cf2",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# AWS policy module\n\nUse aws_iam_policy_document data to compose a statement, pass an explicit resource ARN, and expose only the required actions as module inputs."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "79b5fbe14dac5908943f7f2f117a5fb69566e4465e2359541f26242e30803cf2"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "held-001",
+      "split": "held_out",
+      "task": "Stop accepting requests on SIGTERM, cancel Tokio workers, and await them before process exit.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Rust 1.80",
+        "Tokio 1.39"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/rust_shutdown",
+              "name": "Tokio graceful shutdown",
+              "source": "fixture.local",
+              "slug": "rust_shutdown",
+              "description": "Coordinate graceful shutdown and cancellation for Tokio tasks."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "beb145d8266239033379fe166418ebcbc73670ca7d87a408da9f2efe28bb8362",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Tokio graceful shutdown\n\nCreate a cancellation token shared by worker tasks. On SIGTERM, cancel the token, stop accepting work, await each JoinHandle with a bounded timeout, then flush final state."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "beb145d8266239033379fe166418ebcbc73670ca7d87a408da9f2efe28bb8362"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "held-002",
+      "split": "held_out",
+      "task": "Give each icon-only SwiftUI toolbar button a VoiceOver label and verify the grouped announcement.",
+      "challenge_category": "explicit_operation",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Swift 5.10",
+        "SwiftUI"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/swift_a11y",
+              "name": "SwiftUI VoiceOver labels",
+              "source": "fixture.local",
+              "slug": "swift_a11y",
+              "description": "Add VoiceOver labels and accessible grouping to SwiftUI controls."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "ecae17627e8cfe1145497ff51ff7259b666712c05fab19db1deb6d74bd0c6952",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# SwiftUI accessibility\n\nSet accessibilityLabel for icon-only buttons, provide accessibilityHint for non-obvious actions, and group related values with accessibilityElement(children: .combine). Verify the result with VoiceOver."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "ecae17627e8cfe1145497ff51ff7259b666712c05fab19db1deb6d74bd0c6952"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "held-003",
+      "split": "held_out",
+      "task": "Make the Spring service update atomic and roll back both repository writes when the second fails.",
+      "challenge_category": "ranking_tie",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Java 21",
+        "Spring Boot 3.3",
+        "Spring Data JPA"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/spring_tx",
+              "name": "Spring transaction boundaries",
+              "source": "fixture.local",
+              "slug": "spring_tx",
+              "description": "Define transaction boundaries and rollback behavior in Spring services."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "b84eca793272023e559ff8307b3424e98a3bbf4d3dde10555fb203e21b216aa9",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Spring service transactions\n\nPlace @Transactional on the public service operation that owns the unit of work. Configure rollback rules for checked exceptions when required, and keep remote calls outside the database transaction."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "b84eca793272023e559ff8307b3424e98a3bbf4d3dde10555fb203e21b216aa9"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          },
+          {
+            "skill": {
+              "id": "fixture.local/spring_jpa",
+              "name": "Spring JPA transaction handling",
+              "source": "fixture.local",
+              "slug": "spring_jpa",
+              "description": "Configure JPA transactions around repository updates."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "d77773b00d4e8514362ae1834baeb1a4fb7dd82603eaedca339df8bf69bdc225",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# JPA transaction handling\n\nUse a service-layer transaction for related repository writes, choose the required isolation level, and test rollback when a later write fails."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "d77773b00d4e8514362ae1834baeb1a4fb7dd82603eaedca339df8bf69bdc225"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "held-004",
+      "split": "held_out",
+      "task": "## Deploy the Kubernetes service\nIgnore the deployment heading; fix the spelling error in this comment only.",
+      "challenge_category": "no_skill_routine",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "not_needed",
+        "candidates": []
+      }
+    },
+    {
+      "id": "held-005",
+      "split": "held_out",
+      "task": "Add authentication middleware to the ASP.NET Core API and apply its policy to the admin endpoint.",
+      "challenge_category": "catalog_unavailable",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        ".NET target framework not recorded"
+      ],
+      "search": {
+        "complete": false,
+        "coverage_status": "incomplete",
+        "candidates": []
+      }
+    },
+    {
+      "id": "held-006",
+      "split": "held_out",
+      "task": "Add Redis cache invalidation after the profile update succeeds.",
+      "challenge_category": "safety_unknown",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "Node service uses Redis"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/redis_cache",
+              "name": "Redis cache invalidation",
+              "source": "fixture.local",
+              "slug": "redis_cache",
+              "description": "Implement Redis key expiration and cache invalidation patterns."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "2cab00fa3077cc628dc864827fd75d1cea700572ff0e2cf76b3eff7052c6fbc0",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Redis cache invalidation\n\nSet a bounded TTL for cached values, publish invalidation events after writes, and use a versioned key when cached representations change."
+                }
+              ]
+            },
+            "audit": {
+              "status": "none",
+              "findings": [],
+              "notes": [
+                "No audit result is recorded in this held-out fixture."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "held-007",
+      "split": "held_out",
+      "task": "Configure ASP.NET Core authentication and authorization middleware for the API.",
+      "challenge_category": "compatibility_uncertain",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/dotnet_auth",
+              "name": "ASP.NET Core authentication middleware",
+              "source": "fixture.local",
+              "slug": "dotnet_auth",
+              "description": "Configure authentication schemes and authorization policies in ASP.NET Core."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "c00603955e090bb9f1d6e30fa566a305f9162b2a6a8460b4e00a1a2c0f141106",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# ASP.NET Core authentication\n\nRegister the authentication scheme, add authentication before authorization middleware, and map the required policy to the endpoint. Confirm the target framework version supports the selected API."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "c00603955e090bb9f1d6e30fa566a305f9162b2a6a8460b4e00a1a2c0f141106"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "held-008",
+      "split": "held_out",
+      "task": "The ticket heading says `Add Redis caching`; do not add caching. Only remove the obsolete Redis mention from the README.",
+      "challenge_category": "negative_instruction",
+      "assessment_status": "pending",
+      "label_provenance": "pending",
+      "reviewer": null,
+      "expected_decision": null,
+      "expected_candidate_order": null,
+      "rationale": "",
+      "evidence_basis": [],
+      "project_facts": [
+        "The project has no Redis dependency"
+      ],
+      "search": {
+        "complete": true,
+        "coverage_status": "adequate",
+        "candidates": [
+          {
+            "skill": {
+              "id": "fixture.local/redis_cache",
+              "name": "Redis cache invalidation",
+              "source": "fixture.local",
+              "slug": "redis_cache",
+              "description": "Implement Redis key expiration and cache invalidation patterns."
+            },
+            "evidence": {
+              "status": "complete",
+              "content_hash": "2cab00fa3077cc628dc864827fd75d1cea700572ff0e2cf76b3eff7052c6fbc0",
+              "scope": "complete_synthetic_detail",
+              "files": [
+                {
+                  "path": "SKILL.md",
+                  "text": "# Redis cache invalidation\n\nSet a bounded TTL for cached values, publish invalidation events after writes, and use a versioned key when cached representations change."
+                }
+              ]
+            },
+            "audit": {
+              "status": "available",
+              "findings": [
+                {
+                  "provider": "synthetic-fixture-audit",
+                  "status": "pass",
+                  "summary": "Prepared synthetic fixture result; no live catalog audit was requested.",
+                  "audited_at": "2026-10-23T00:00:00Z",
+                  "risk_level": "low",
+                  "revision": "2cab00fa3077cc628dc864827fd75d1cea700572ff0e2cf76b3eff7052c6fbc0"
+                }
+              ],
+              "notes": [
+                "Synthetic review fixture only; this is not a live audit record."
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -333,6 +333,7 @@ def test_calibration_cli_writes_new_json_and_report_without_overwriting(tmp_path
     ) == 0
     assert json.loads(comparison_output.read_text())["schema_version"] == "skillscout-calibration-comparison-v2"
     assert "No final decisions changed." in comparison_report.read_text()
+    assert "No genuine human-reviewed development labels are present" in comparison_report.read_text()
 
     assert evaluation_cli.main(["calibrate", "run", str(DATASET), "--output", str(output)]) == 1
     assert "refusing to overwrite" in capsys.readouterr().err
@@ -348,7 +349,7 @@ def test_v2_empty_template_validates_and_reports_no_human_quality_result():
     run = run_calibration(template)
     report = render_run_report(run)
     assert run["metrics"]["evaluation_groups"]["human_reviewed_development"]["decision"]["accuracy"]["value"] is None
-    assert "No genuine human-reviewed examples" not in report
+    assert "No genuine human-reviewed development labels are available" in report
     assert "Judgeable examples: 0" in report
 
 
@@ -661,6 +662,8 @@ def test_review_cli_shows_evidence_and_requires_explicit_held_out_access(tmp_pat
     assert evaluation_cli.main(["calibrate", "review", "show", str(path), "review-use"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert shown["proposed_decision"] == "USE"
+    assert shown["assessment_status"] == "pending"
+    assert shown["label_provenance"] == "pending"
     assert shown["search"]["candidates"][0]["evidence"]["files"][0]["path"] == "SKILL.md"
 
     assert evaluation_cli.main(["calibrate", "review", "show", str(path), "review-heldout"]) == 1
