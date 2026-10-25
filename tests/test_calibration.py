@@ -134,6 +134,14 @@ def test_offline_pipeline_is_deterministic_and_does_not_make_http_requests(monke
         "unresolved_conflicts": 0,
         "resolved_ambiguous_reviews": 0,
         "resolved_unjudgeable_reviews": 0,
+        "human_review": {
+            "reviewed_examples": 0,
+            "judgeable_examples": 0,
+            "ambiguous_examples": 0,
+            "unjudgeable_examples": 0,
+            "unresolved_review_examples": 0,
+            "pending_unreviewed_examples": 0,
+        },
     }
     assert first["metrics"]["evaluation_groups"]["human_reviewed_development"]["decision"]["accuracy"]["value"] is None
     assert first["metrics"]["evaluation_groups"]["synthetic_smoke_test"]["decision"]["accuracy"]["value"] == 1.0
@@ -311,7 +319,7 @@ def test_calibration_cli_writes_new_json_and_report_without_overwriting(tmp_path
     ) == 0
     captured = capsys.readouterr()
     assert "Synthetic smoke-test results (not recommendation-quality evidence)" in captured.out
-    assert json.loads(output.read_text())["schema_version"] == "skillscout-calibration-run-v2"
+    assert json.loads(output.read_text())["schema_version"] == "skillscout-calibration-run-v3"
     assert "Judgeable examples: 0" in report.read_text()
     assert "Excluded by default: 5 held-out examples" in report.read_text()
 
@@ -441,6 +449,14 @@ def test_disagreement_stays_unresolved_until_explicit_adjudication(tmp_path):
     run = run_calibration(dataset_path, reviews_path=ledger)
     assert run["metrics"]["evaluation_groups"]["human_reviewed_development"]["example_count"] == 0
     assert run["metrics"]["counts"]["unresolved_conflicts"] == 1
+    assert run["metrics"]["counts"]["human_review"] == {
+        "reviewed_examples": 1,
+        "judgeable_examples": 0,
+        "ambiguous_examples": 0,
+        "unjudgeable_examples": 0,
+        "unresolved_review_examples": 1,
+        "pending_unreviewed_examples": 0,
+    }
     assert run["examples"][0]["expected_decision"] is None
 
     adjudication = _append_review(
@@ -461,6 +477,14 @@ def test_disagreement_stays_unresolved_until_explicit_adjudication(tmp_path):
     assert state["resolved_event"]["event_id"] == adjudication["event_id"]
     resolved_run = run_calibration(dataset_path, reviews_path=ledger)
     assert resolved_run["metrics"]["evaluation_groups"]["human_reviewed_development"]["example_count"] == 1
+    assert resolved_run["metrics"]["counts"]["human_review"] == {
+        "reviewed_examples": 1,
+        "judgeable_examples": 1,
+        "ambiguous_examples": 0,
+        "unjudgeable_examples": 0,
+        "unresolved_review_examples": 0,
+        "pending_unreviewed_examples": 0,
+    }
     assert resolved_run["examples"][0]["expected_decision"] == "REVIEW"
 
 
@@ -504,6 +528,8 @@ def test_ambiguous_and_unjudgeable_consensus_remain_outside_accuracy(tmp_path):
     run = run_calibration(path, reviews_path=ledger)
     assert run["metrics"]["counts"]["ambiguous"] == 1
     assert run["metrics"]["counts"]["incomplete"] == 1
+    assert run["metrics"]["counts"]["human_review"]["ambiguous_examples"] == 1
+    assert run["metrics"]["counts"]["human_review"]["unjudgeable_examples"] == 1
     assert run["metrics"]["evaluation_groups"]["human_reviewed_development"]["example_count"] == 0
     by_id = {item["example_id"]: item for item in run["examples"]}
     assert by_id["review-use"]["assessment_status"] == "ambiguous"
@@ -526,6 +552,7 @@ def test_held_out_metrics_are_separate_and_excluded_by_default(tmp_path):
     default = run_calibration(dataset_path, reviews_path=ledger)
     assert [item["example_id"] for item in default["examples"]] == ["review-use"]
     assert default["metrics"]["counts"]["held_out_examples_excluded"] == 1
+    assert default["metrics"]["counts"]["human_review"]["reviewed_examples"] == 1
     groups = default["metrics"]["evaluation_groups"]
     assert groups["human_reviewed_development"]["decision"]["accuracy"]["denominator"] == 1
     assert groups["human_reviewed_held_out"]["included"] is False
@@ -672,6 +699,16 @@ def test_review_cli_shows_evidence_and_requires_explicit_held_out_access(tmp_pat
         ["calibrate", "review", "show", str(path), "review-heldout", "--include-held-out"]
     ) == 0
     assert "held_out_notice" in json.loads(capsys.readouterr().out)
+
+    assert evaluation_cli.main(
+        [
+            "calibrate", "review", "submit", str(path), "review-heldout", "--reviews", str(ledger),
+            "--reviewer", "reviewer-a", "--status", "judgeable", "--decision", "USE",
+            "--rationale", "The evidence supports the operation.",
+            "--evidence-basis", "The inspected excerpt documents the operation.",
+        ]
+    ) == 1
+    assert "held-out review is sealed" in capsys.readouterr().err
 
     assert evaluation_cli.main(
         [

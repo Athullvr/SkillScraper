@@ -6,6 +6,8 @@ SkillScout never installs, activates, imports, or executes candidate files. Prop
 
 ## Install and run
 
+For a project-supplied wheel, a Codex CLI MCP setup, short reproducible pilot tasks, and a privacy-conscious feedback form, see the [developer pilot kit](docs/developer-pilot.md). SkillScout is not published on PyPI.
+
 Requires Python 3.12 or newer. SkillScout is distributed as a wheel by the project; it is not currently published on PyPI. Build a wheel from a checkout, or use a wheel supplied by the project, then install it into a dedicated environment outside the checkout:
 
 ```bash

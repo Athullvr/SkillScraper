@@ -30,6 +30,8 @@ Run the commands from the source checkout with its project environment installed
 
 Freeze a copy of the proposal and start a new ledger. The following commands create a fresh review directory so they do not overwrite existing work. Keep that dataset file unchanged once anyone begins review; edits require a new dataset version and a new ledger because every event is bound to the exact dataset SHA-256:
 
+During development, review only `development` examples. `review show`, `review submit`, and `review adjudicate` all refuse held-out examples unless `--include-held-out` is supplied. Leave those eight examples pending until implementation and analysis are frozen; the explicit flag is reserved for final evaluation.
+
 ```sh
 REVIEW_DIR="$(mktemp -d /tmp/skillscout-review.XXXXXX)"
 DATASET="$REVIEW_DIR/dataset.json"
@@ -113,7 +115,7 @@ For `NO_SKILL_NEEDED`, reviewers must establish either the local routine-task fa
 
 ## Offline evaluation and held-out protection
 
-Run a review ledger against the dataset. By default, held-out examples are omitted from evaluated example rows and all metrics; the report gives their excluded count. Human development results, human held-out results, and synthetic smoke-test results remain separate:
+Run a review ledger against the dataset. By default, held-out examples are omitted from evaluated example rows and all metrics; the report gives their excluded count. Keep the held-out tasks sealed from anyone changing thresholds, ranking weights, wording, or features. Do not inspect or reveal a held-out packet during development. Only after the implementation and analysis plan are frozen should an evaluator run the explicit final command below. Human development results, human held-out results, and synthetic smoke-test results remain separate:
 
 ```sh
 python -m skillscout.evaluation calibrate run "$DATASET" \
@@ -121,7 +123,7 @@ python -m skillscout.evaluation calibrate run "$DATASET" \
   --report "$REVIEW_DIR/dev-run.md"
 ```
 
-The default report includes human-reviewed development metrics and synthetic smoke-test metrics. It does not report held-out labels or predictions. False USE, false `NO_SKILL_NEEDED`, and unnecessary `REVIEW` rates use predictions of that decision as their denominators; false USE share of all judgeable examples is shown separately. Per-decision precision/recall and candidate-order metrics also include their denominators. Only for an explicit final evaluation, request:
+The default report includes human-reviewed development metrics and synthetic smoke-test metrics. It does not report held-out labels or predictions. Its review disposition counts report reviewed, judgeable, ambiguous, unjudgeable, unresolved, and still-pending examples within the included development scope; synthetic smoke-test labels are excluded from human-review counts. False `USE`, false `NO_SKILL_NEEDED`, and unnecessary `REVIEW` rates use predictions of that decision as their denominators; false `USE` share of all judgeable examples is shown separately. Per-decision precision/recall and candidate-order metrics also include their denominators. Only for an explicit final evaluation, request:
 
 ```sh
 python -m skillscout.evaluation calibrate run "$DATASET" \
@@ -129,7 +131,15 @@ python -m skillscout.evaluation calibrate run "$DATASET" \
   --output "$REVIEW_DIR/final-run.json" --report "$REVIEW_DIR/final-run.md"
 ```
 
-Do not use held-out results to choose thresholds, ranking weights, vocabulary, or other behavior. Do not combine synthetic, development, and held-out accuracies into one score. Each group reports sample counts, explicit denominators, per-decision precision/recall, false USE, false `NO_SKILL_NEEDED`, unnecessary `REVIEW`, and candidate-order metrics. Groups with fewer than 30 judgeable examples receive a small-sample warning; this warning is not a statistical guarantee.
+Do not use held-out results to choose thresholds, ranking weights, vocabulary, or other behavior. The CLI excludes held-out rows by default, and `review show` refuses held-out packets unless explicitly requested; treat that flag as evaluator-only after the development freeze. Do not combine synthetic, development, and held-out accuracies into one score. Each group reports sample counts, explicit denominators, per-decision precision/recall, false positives and false negatives by decision, false `USE`, false `NO_SKILL_NEEDED`, unnecessary `REVIEW`, and candidate-order metrics. Groups with fewer than 30 judgeable examples receive a small-sample warning; this warning is not a statistical guarantee.
+
+Interpret the decision metrics as follows:
+
+- **Decision correctness:** exact agreement with the resolved human label on judgeable examples; report numerator and denominator. Consensus and documented adjudication count; one-review, conflict, ambiguous, unjudgeable, pending, and operationally failed examples do not.
+- **False-positive `USE`:** observed `USE` when the resolved expected decision is not `USE`. Report both false `USE` / predicted `USE` and false `USE` / all judgeable examples.
+- **False negatives:** for each decision class, an expected decision that the system did not return. The per-decision metrics report false-negative counts and recall denominators. Call out false-negative `USE` (missed helpful selection) and false-negative `AVOID` (missed confirmed critical risk) separately when present.
+- **Safety regressions:** compare runs on the same dataset and held-out inclusion setting. Report newly introduced unsupported candidate `USE`, missing complete safety/compatibility evidence, and other safety/evidence violations. Any newly confirmed critical safety regression blocks the change, even if decision accuracy improves.
+- **Evidence sufficiency:** report candidate `USE` counts lacking confirmed operation support and counts lacking complete, current audit and compatible project evidence, each over all candidate `USE` decisions. Missing evidence is unknown, not proof of safety or danger. Keep these candidate-level rates separate from task-level decision accuracy.
 
 Compare two runs on exactly the same dataset and held-out inclusion setting:
 
@@ -148,4 +158,4 @@ The checked-in synthetic examples exercise selected wiring and edge cases only. 
 
 The proposed 40-example collection is ready for review. Its current genuine human-reviewed example count is **0**. The v1 smoke set and any generated run/comparison artifacts remain synthetic or unreviewed; neither is a recommendation-quality result. The offline runner uses only supplied fixture listings, disables optional LLM assessment, and makes no catalog requests, so calibration and review do not require catalog credentials or network access.
 
-Calibration run artifacts now use schema v2 for separated metric groups and review provenance. Regenerate any older v1 run artifacts before comparing them with current runs. The review interface is intentionally a local CLI; future additions to the proposed collection should use deliberately prepared non-sensitive fixtures and exact bounded evidence excerpts.
+Calibration run artifacts now use schema v3 for separated metric groups, review provenance, and explicit human-review disposition counts. Regenerate older v1/v2 run artifacts before comparing them with current runs. The review interface is intentionally a local CLI; future additions to the proposed collection should use deliberately prepared non-sensitive fixtures and exact bounded evidence excerpts.

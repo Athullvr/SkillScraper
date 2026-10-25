@@ -77,6 +77,11 @@ def _add_review_label_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--reason", help="required reason for ambiguous or unjudgeable labels")
     parser.add_argument("--evidence-basis", action="append", default=[], help="specific evidence fact; repeat for multiple facts")
     parser.add_argument("--revise", action="store_true", help="append a revision while preserving the earlier label")
+    parser.add_argument(
+        "--include-held-out",
+        action="store_true",
+        help="explicitly open held-out material; use only after the development freeze",
+    )
 
 
 def _run_calibration_review(args: argparse.Namespace) -> int:
@@ -157,6 +162,11 @@ def _run_calibration_review(args: argparse.Namespace) -> int:
     if args.review_command in {"submit", "adjudicate"}:
         if args.example_id not in examples:
             raise ValueError(f"unknown calibration example ID: {args.example_id}")
+        if examples[args.example_id]["split"] == "held_out" and not args.include_held_out:
+            raise ValueError(
+                "held-out review is sealed by default; pass --include-held-out "
+                "only after the development freeze"
+            )
         events, _ = read_review_ledger(
             args.reviews, dataset=dataset, dataset_sha256=dataset_sha256
         )

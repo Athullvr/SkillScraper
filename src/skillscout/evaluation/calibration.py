@@ -43,7 +43,7 @@ from skillscout.ranking import RankedSkill, rank_catalog_results, refine_rank, r
 DATASET_SCHEMA_V1 = "skillscout-calibration-dataset-v1"
 DATASET_SCHEMA_V2 = "skillscout-calibration-dataset-v2"
 DATASET_SCHEMAS = {DATASET_SCHEMA_V1, DATASET_SCHEMA_V2}
-RUN_SCHEMA = "skillscout-calibration-run-v2"
+RUN_SCHEMA = "skillscout-calibration-run-v3"
 COMPARISON_SCHEMA = "skillscout-calibration-comparison-v2"
 MAX_DATASET_BYTES = 2 * 1024 * 1024
 MAX_RUN_BYTES = 8 * 1024 * 1024
@@ -226,6 +226,34 @@ def compute_calibration_metrics(
     ]
     counts = Counter(str(item.get("assessment_status", "unknown")) for item in rows)
     review_status_counts = Counter(str(item.get("review_status", "unreviewed")) for item in rows)
+    human_review_rows = [
+        item
+        for item in rows
+        if item.get("label_provenance") in {"pending", "human_reviewed"}
+    ]
+    human_review_counts = {
+        "reviewed_examples": sum(
+            item.get("review_count", 0) > 0 for item in human_review_rows
+        ),
+        "judgeable_examples": sum(
+            item.get("review_label_status") == "judgeable" for item in human_review_rows
+        ),
+        "ambiguous_examples": sum(
+            item.get("review_label_status") == "ambiguous" for item in human_review_rows
+        ),
+        "unjudgeable_examples": sum(
+            item.get("review_label_status") == "unjudgeable" for item in human_review_rows
+        ),
+        "unresolved_review_examples": sum(
+            item.get("review_status") in {"awaiting_independent_review", "conflict"}
+            for item in human_review_rows
+        ),
+        "pending_unreviewed_examples": sum(
+            item.get("review_status", "unreviewed") == "unreviewed"
+            and item.get("assessment_status") == "pending"
+            for item in human_review_rows
+        ),
+    }
     candidate_uses = [
         candidate
         for item in rows
@@ -263,6 +291,7 @@ def compute_calibration_metrics(
             "unresolved_conflicts": review_status_counts.get("conflict", 0),
             "resolved_ambiguous_reviews": sum(item.get("review_label_status") == "ambiguous" for item in rows),
             "resolved_unjudgeable_reviews": sum(item.get("review_label_status") == "unjudgeable" for item in rows),
+            "human_review": human_review_counts,
         },
         "evaluation_groups": {
             "synthetic_smoke_test": _metric_group(synthetic, included=True),
@@ -536,6 +565,22 @@ def render_run_report(run: Mapping[str, Any]) -> str:
             f"- Human-reviewed ambiguous: {counts['resolved_ambiguous_reviews']}",
             f"- Human-reviewed unjudgeable: {counts['resolved_unjudgeable_reviews']}",
             f"- Unresolved review conflicts: {counts['unresolved_conflicts']}",
+            "",
+            "## Human review disposition",
+            "",
+            f"- Reviewed examples (at least one independent label): "
+            f"{counts['human_review']['reviewed_examples']}",
+            f"- Judgeable examples (consensus or adjudicated): "
+            f"{counts['human_review']['judgeable_examples']}",
+            f"- Ambiguous examples: {counts['human_review']['ambiguous_examples']}",
+            f"- Unjudgeable examples: {counts['human_review']['unjudgeable_examples']}",
+            f"- Unresolved reviews (awaiting a second review or adjudication): "
+            f"{counts['human_review']['unresolved_review_examples']}",
+            f"- Pending and unreviewed examples: "
+            f"{counts['human_review']['pending_unreviewed_examples']}",
+            "",
+            "These human-review counts use the current run scope. The default run excludes held-out examples; synthetic smoke-test labels are reported separately and are not counted as human reviews.",
+            "",
             f"- Review states: `{json.dumps(counts['review_statuses'], sort_keys=True)}`",
             "",
             "A zero denominator is `n/a`, not a passing score. Accuracy and per-decision rates show explicit denominators in the JSON. False USE rate uses predicted USE decisions as its denominator; false USE share of all judgeable examples is separately recorded. Every group warns when it has fewer than 30 judgeable examples.",
