@@ -421,6 +421,10 @@ def test_operational_catalog_errors_are_not_reported_as_no_skill(
     assert payload.status == "error"
     assert payload.decision is None
     assert payload.error.code == expected_code
+    if expected_code == "catalog_credentials_missing":
+        assert "VERCEL_OIDC_TOKEN" in payload.error.message
+        assert "SKILLSCOUT_CATALOG_TOKEN" in payload.next_action
+        assert "no catalog request was sent" in payload.next_action
     assert str(tmp_path) not in json.dumps(payload.model_dump(mode="json"))
     assert "credential value" not in json.dumps(payload.model_dump(mode="json"))
 

@@ -9,7 +9,7 @@ from skillscout.config import Config
 def config() -> Config:
     return Config(
         catalog_base_url="https://skills.test",
-        catalog_token=None,
+        catalog_token="fixture-catalog-token",
         candidate_limit=3,
         connect_timeout_seconds=0.2,
         read_timeout_seconds=0.2,

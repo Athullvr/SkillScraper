@@ -1,6 +1,6 @@
 # Manual live catalog demo
 
-This is a separate, explicit network check. It is not part of pytest.
+This is a separate, explicit network check. It is not part of pytest. Before running it, provide an authorized `VERCEL_OIDC_TOKEN` or `SKILLSCOUT_CATALOG_TOKEN` to the SkillScout process through an approved secret manager or environment-injection mechanism. If neither credential is configured, catalog operations stop locally with an actionable missing-credential error and send no request. `doctor` remains local-only.
 
 ```bash
 uv sync --all-extras

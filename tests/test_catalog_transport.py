@@ -136,7 +136,7 @@ def test_audit_authentication_failure_remains_unknown(config):
 
     assert audits == []
     assert state == "unavailable"
-    assert "requires credentials" in notes[0]
+    assert "configured catalog credential was rejected" in notes[0]
 
 
 @pytest.mark.parametrize(
@@ -258,14 +258,14 @@ def test_permanent_http_responses_are_classified_without_retry(config, status_co
 
 
 @pytest.mark.parametrize(
-    ("token", "expected_error"),
+    ("token", "expected_error", "expected_requests"),
     [
-        (None, CatalogCredentialsMissingError),
-        ("fixture-token-never-log", CatalogCredentialsRejectedError),
+        (None, CatalogCredentialsMissingError, 0),
+        ("fixture-token-never-log", CatalogCredentialsRejectedError, 1),
     ],
 )
 def test_authentication_failures_distinguish_missing_and_rejected_credentials(
-    config, token, expected_error
+    config, token, expected_error, expected_requests
 ):
     from dataclasses import replace
 
@@ -275,7 +275,7 @@ def test_authentication_failures_distinguish_missing_and_rejected_credentials(
     def handler(_request):
         nonlocal requests
         requests += 1
-        return httpx.Response(401)
+        return httpx.Response(401, json={"message": "PRIVATE_UPSTREAM_RESPONSE_BODY"})
 
     catalog, client = _catalog(configured, handler)
     try:
@@ -284,8 +284,47 @@ def test_authentication_failures_distinguish_missing_and_rejected_credentials(
     finally:
         client.close()
 
-    assert requests == 1
+    assert requests == expected_requests
     assert "fixture-token-never-log" not in str(error.value)
+    assert "PRIVATE_UPSTREAM_RESPONSE_BODY" not in str(error.value)
+
+
+@pytest.mark.parametrize("operation", ["search", "detail", "audit"])
+def test_missing_credentials_do_not_send_catalog_requests(config, operation):
+    from dataclasses import replace
+
+    configured = replace(config, catalog_token=None)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    catalog, client = _catalog(configured, handler)
+    skill = CatalogSkill(
+        id="acme/skills/fastapi-auth",
+        source="acme/skills",
+        slug="fastapi-auth",
+        name="FastAPI authentication",
+    )
+    try:
+        if operation == "search":
+            with pytest.raises(CatalogCredentialsMissingError, match="credentials are not configured"):
+                catalog.search("FastAPI authentication")
+        elif operation == "detail":
+            with pytest.raises(CatalogCredentialsMissingError, match="credentials are not configured"):
+                catalog.get_detail(skill)
+        else:
+            audits, status, notes = catalog.get_audits(skill)
+            assert audits == []
+            assert status == "unavailable"
+            assert "credentials are not configured" in notes[0]
+            assert "VERCEL_OIDC_TOKEN" in notes[0]
+            assert "SKILLSCOUT_CATALOG_TOKEN" in notes[0]
+    finally:
+        client.close()
+
+    assert requests == []
 
 
 def test_rate_limit_with_excessive_retry_after_fails_without_unbounded_wait(config):

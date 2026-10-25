@@ -5,6 +5,7 @@ import json
 import sys
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from skillscout import application, codex_hook, codex_hook_entrypoint
@@ -194,6 +195,40 @@ def test_routine_hook_does_not_load_catalog_configuration_or_client(tmp_path, mo
     )
 
     assert "NO_SKILL_NEEDED" in response["hookSpecificOutput"]["additionalContext"]
+
+
+def test_unconfigured_hook_returns_review_without_catalog_request(tmp_path, monkeypatch, config):
+    from dataclasses import replace
+
+    from skillscout.catalog import CatalogClient
+
+    requests = []
+    transport = httpx.MockTransport(
+        lambda request: requests.append(request) or httpx.Response(200, json={"data": []})
+    )
+    client = httpx.Client(transport=transport)
+    configured = replace(config, catalog_token=None)
+    monkeypatch.setattr(codex_hook, "load_config", lambda: configured)
+    monkeypatch.setattr(
+        application,
+        "CatalogClient",
+        lambda request_config: CatalogClient(request_config, client=client),
+    )
+
+    try:
+        response = codex_hook.handle_event(
+            _event("Implement OAuth2 authentication for a FastAPI endpoint.", str(tmp_path))
+        )
+    finally:
+        client.close()
+
+    context = response["hookSpecificOutput"]["additionalContext"]
+    assert "REVIEW" in context
+    assert "credentials are missing" in context
+    assert "VERCEL_OIDC_TOKEN" in context
+    assert "SKILLSCOUT_CATALOG_TOKEN" in context
+    assert "not a no-skill decision" in context
+    assert requests == []
 
 
 @pytest.mark.parametrize("raw", [b"{", b"x" * (codex_hook.MAX_EVENT_BYTES + 1)])

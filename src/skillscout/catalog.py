@@ -183,9 +183,20 @@ class CatalogClient:
             payload = _validate_success_envelope(
                 self._get_json(f"/api/v1/skills/audit/{path}"), operation="audit"
             )
+        except CatalogCredentialsMissingError:
+            return [], "unavailable", [
+                "External audit lookup was skipped because catalog credentials are not configured; "
+                "set VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN."
+            ]
+        except CatalogCredentialsRejectedError:
+            return [], "unavailable", [
+                "External audit lookup failed because the configured catalog credential was "
+                "rejected or lacks access."
+            ]
         except CatalogAuthenticationError:
             return [], "unavailable", [
-                "External audit endpoint requires credentials or rejected the configured token."
+                "External audit endpoint requires authentication; configure an authorized "
+                "catalog credential."
             ]
         except CatalogNotFoundError:
             return [], "none", ["No external audit results are available in the catalog."]
@@ -233,10 +244,14 @@ class CatalogClient:
         return "/".join(quote(part, safe="") for part in [*source_parts, slug])
 
     def _get_json(self, endpoint: str, *, params: dict[str, str | int] | None = None) -> object:
+        if not self.config.catalog_token:
+            raise CatalogCredentialsMissingError(
+                "catalog credentials are not configured; set VERCEL_OIDC_TOKEN or "
+                "SKILLSCOUT_CATALOG_TOKEN before catalog-backed requests"
+            )
         url = f"{self.config.catalog_base_url}{endpoint}"
         headers = {"Accept": "application/json", "User-Agent": "SkillScout/0.1.0"}
-        if self.config.catalog_token:
-            headers["Authorization"] = f"Bearer {self.config.catalog_token}"
+        headers["Authorization"] = f"Bearer {self.config.catalog_token}"
         request_timeout = self.config.request_timeout_seconds
         timeout = httpx.Timeout(
             request_timeout,

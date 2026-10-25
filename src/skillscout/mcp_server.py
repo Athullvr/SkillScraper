@@ -582,7 +582,12 @@ def _prepare_error(
         decision=None,
         task=_safe_text(redact_secrets(task), MAX_TASK_CHARS) if task else None,
         explanation="SkillScout did not complete a recommendation.",
-        next_action="Resolve the reported issue and retry; do not treat this failure as NO_SKILL_NEEDED.",
+        next_action=(
+            "Configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN for the SkillScout process "
+            "and retry; no catalog request was sent."
+            if code == "catalog_credentials_missing"
+            else "Resolve the reported issue and retry; do not treat this failure as NO_SKILL_NEEDED."
+        ),
         error=MCPToolError(code=code, message=_safe_text(message, 500)),
     )
 
@@ -592,7 +597,12 @@ def _inspect_error(code: str, message: str) -> InspectSkillResult:
         status="error",
         decision=None,
         explanation="SkillScout did not complete the inspection.",
-        next_action="Resolve the reported issue and retry; no inspection decision is available.",
+        next_action=(
+            "Configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN for the SkillScout process "
+            "and retry; no catalog request was sent."
+            if code == "catalog_credentials_missing"
+            else "Resolve the reported issue and retry; no inspection decision is available."
+        ),
         error=MCPToolError(code=code, message=_safe_text(message, 500)),
     )
 

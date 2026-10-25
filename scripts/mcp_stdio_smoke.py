@@ -216,7 +216,7 @@ async def _sdk_session(
                         raise RuntimeError("missing-credential error did not name its corrective action")
                     if (
                         missing_credential.get("decision") is not None
-                        or "no inspection decision is available"
+                        or "no catalog request was sent"
                         not in missing_credential.get("next_action", "")
                     ):
                         raise RuntimeError("missing-credential result did not preserve uncertainty")

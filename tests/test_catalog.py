@@ -115,7 +115,7 @@ def test_audit_authentication_failure_is_unknown_not_a_search_failure(config):
 
     assert audits == []
     assert state == "unavailable"
-    assert "requires credentials" in notes[0]
+    assert "configured catalog credential was rejected" in notes[0]
 
 
 def test_missing_audit_404_is_recorded_as_no_result(config):
