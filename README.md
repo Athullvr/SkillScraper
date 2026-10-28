@@ -79,7 +79,7 @@ SkillScraper requires a configured bearer token before it sends catalog search, 
 
 ### Optional Codex hook
 
-The package also provides the compatibility executable `skillscout-codex-hook` for the Codex `UserPromptSubmit` event. It is opt-in and distinct from MCP configuration. Registration, trust, and actual host-level execution remain unverified; do not rely on it for automatic routing. See [release-candidate verification](docs/release-candidate-verification-2026-10-25.md) and the official [Codex hooks guide](https://developers.openai.com/codex/hooks) before trying it in a disposable project. Do not enable an all-prompts hook for sensitive task text.
+The package also provides the compatibility executable `skillscout-codex-hook` for the Codex `UserPromptSubmit` event. It is opt-in and distinct from MCP configuration. Its `additionalContext` is advisory: Codex may not follow it, and the hook cannot enforce a recommendation. For a deliberate workflow, call MCP `prepare_task` and then `inspect_skill` for a candidate you choose. Registration, trust, and actual host-level execution remain unverified; do not rely on the hook for automatic routing. See [release-candidate verification](docs/release-candidate-verification-2026-10-25.md) and the official [Codex hooks guide](https://developers.openai.com/codex/hooks) before trying it in a disposable project. Do not enable an all-prompts hook for sensitive task text.
 
 ## First use
 
