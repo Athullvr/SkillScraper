@@ -319,8 +319,7 @@ def test_missing_credentials_do_not_send_catalog_requests(config, operation):
             assert audits == []
             assert status == "unavailable"
             assert "credentials are not configured" in notes[0]
-            assert "VERCEL_OIDC_TOKEN" in notes[0]
-            assert "SKILLSCOUT_CATALOG_TOKEN" in notes[0]
+            assert "SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN" in notes[0]
     finally:
         client.close()
 

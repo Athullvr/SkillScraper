@@ -186,7 +186,7 @@ class CatalogClient:
         except CatalogCredentialsMissingError:
             return [], "unavailable", [
                 "External audit lookup was skipped because catalog credentials are not configured; "
-                "set VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN."
+                "set SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN."
             ]
         except CatalogCredentialsRejectedError:
             return [], "unavailable", [
@@ -246,8 +246,8 @@ class CatalogClient:
     def _get_json(self, endpoint: str, *, params: dict[str, str | int] | None = None) -> object:
         if not self.config.catalog_token:
             raise CatalogCredentialsMissingError(
-                "catalog credentials are not configured; set VERCEL_OIDC_TOKEN or "
-                "SKILLSCOUT_CATALOG_TOKEN before catalog-backed requests"
+                "catalog credentials are not configured; set SKILLSCOUT_CATALOG_TOKEN "
+                "(preferred) or VERCEL_OIDC_TOKEN before catalog-backed requests"
             )
         url = f"{self.config.catalog_base_url}{endpoint}"
         headers = {"Accept": "application/json", "User-Agent": "SkillScraper/0.1.0"}
@@ -286,7 +286,7 @@ class CatalogClient:
                             )
                         raise CatalogCredentialsMissingError(
                             "catalog requires a bearer credential; configure "
-                            "VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN"
+                            "SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN"
                         )
                     if response.status_code == 404:
                         raise CatalogNotFoundError(404, "catalog resource was not found (HTTP 404)")

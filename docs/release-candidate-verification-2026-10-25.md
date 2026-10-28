@@ -157,3 +157,11 @@ For contributions, verify that each contributor has the right to submit the work
 5. **P2 — Verify Claude Code in an actual supported client session before claiming that integration.** Current pilot instructions are Codex-focused; Claude Code remains unverified.
 
 The controlled pilot can proceed only as an opt-in, project-supplied-artifact exercise under the owner's chosen distribution terms. Keep the success thresholds labeled proposed, collect only the sanitized feedback fields in the pilot guide, and make no public reliability claim.
+
+## Follow-up — local catalog credential gate (2026-10-28)
+
+The dated verification notes above record the earlier request path and recommendation to add a local preflight. The current `CatalogClient` now checks credentials in `_get_json` before invoking the HTTP client for search, detail, and audit operations. Missing credentials therefore produce zero outbound catalog requests. Search and detail return a sanitized `catalog_credentials_missing` error; audit lookup is marked unavailable, never as an empty audit result. Request-spy tests cover all three operations. The full test suite passed with 295 tests on this follow-up.
+
+The supported precedence is `SKILLSCOUT_CATALOG_TOKEN` first, then `VERCEL_OIDC_TOKEN` when the first variable is empty or absent. Local `doctor` and eligible routine-task fast paths remain usable without either credential. The current process had neither variable configured, so no live search, detail, or audit request was made and authenticated catalog behavior remains unverified.
+
+The [skills.sh API reference](https://www.skills.sh/docs/api) documents bearer-token authentication for API requests and explicitly marks the audit endpoint as authentication-required. This follow-up records local gating and fixture evidence only; it does not clear the authenticated-live-catalog release blocker or verify that a supplied credential is accepted.

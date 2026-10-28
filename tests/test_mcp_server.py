@@ -426,7 +426,7 @@ def test_operational_catalog_errors_are_not_reported_as_no_skill(
     assert payload.decision is None
     assert payload.error.code == expected_code
     if expected_code == "catalog_credentials_missing":
-        assert "VERCEL_OIDC_TOKEN" in payload.error.message
+        assert "SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN" in payload.error.message
         assert "SKILLSCOUT_CATALOG_TOKEN" in payload.next_action
         assert "no catalog request was sent" in payload.next_action
     assert str(tmp_path) not in json.dumps(payload.model_dump(mode="json"))
@@ -539,6 +539,11 @@ def test_inspect_skill_returns_structured_revision_bound_result(tmp_path, monkey
 
 def test_doctor_tool_reports_configuration_without_host_or_secret_values(monkeypatch):
     monkeypatch.setattr(application, "load_config", lambda: _config())
+
+    def unexpected_catalog_client(*_args, **_kwargs):
+        raise AssertionError("doctor must not initialize catalog transport")
+
+    monkeypatch.setattr(application, "CatalogClient", unexpected_catalog_client)
 
     result = _call_tool("doctor", {})
 

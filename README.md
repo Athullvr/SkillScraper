@@ -75,7 +75,7 @@ Restart Codex, check registration with `codex mcp list`, and use `/mcp` in a Cod
 - `inspect_skill(skill_id, project_path?)`
 - `doctor()`
 
-Catalog-backed calls may require an authorized bearer token. SkillScraper reads the compatibility variable `SKILLSCOUT_CATALOG_TOKEN` (preferred) or `VERCEL_OIDC_TOKEN` from its process environment at startup. The `env_vars` line allowlists these names for the server; supply any value through an approved secret manager or environment-injection mechanism. Do not put a credential value in Codex configuration, a prompt, or a report. Restart Codex after changing the environment or renewing a token. `doctor` reports whether a credential is configured but does not validate it.
+SkillScraper requires a configured bearer token before it sends catalog search, detail, or audit requests. It reads `SKILLSCOUT_CATALOG_TOKEN` first and falls back to `VERCEL_OIDC_TOKEN`; if both are non-empty, `SKILLSCOUT_CATALOG_TOKEN` takes precedence. These values must be present in the server process environment at startup. The `env_vars` line allowlists the names for the server; provide values through an approved secret manager or environment-injection mechanism. Do not put a credential value in Codex configuration, a prompt, or a report. Restart Codex after changing the environment or renewing a token. `doctor` reports whether a credential is configured but does not validate it.
 
 ### Optional Codex hook
 

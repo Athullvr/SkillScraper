@@ -24,6 +24,16 @@ def test_catalog_urls_cannot_embed_credentials_or_query_parameters(monkeypatch):
         load_config()
 
 
+def test_catalog_credential_precedence_prefers_compatibility_override(monkeypatch):
+    monkeypatch.setenv("SKILLSCOUT_CATALOG_TOKEN", "compatibility-token")
+    monkeypatch.setenv("VERCEL_OIDC_TOKEN", "vercel-token")
+
+    assert load_config().catalog_token == "compatibility-token"
+
+    monkeypatch.setenv("SKILLSCOUT_CATALOG_TOKEN", "")
+    assert load_config().catalog_token == "vercel-token"
+
+
 def test_llm_requires_task_text_opt_in_to_be_active(monkeypatch):
     monkeypatch.setenv("SKILLSCOUT_LLM_API_KEY", "test-key")
     monkeypatch.delenv("SKILLSCOUT_LLM_SEND_TASK", raising=False)

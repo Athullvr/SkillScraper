@@ -74,8 +74,8 @@ def handle_event(payload: object) -> dict[str, object]:
         )
     except CatalogCredentialsMissingError:
         return _review(
-            "catalog credentials are missing. Configure `VERCEL_OIDC_TOKEN` or "
-            "`SKILLSCOUT_CATALOG_TOKEN` for the SkillScraper process, then retry; this is not a "
+            "catalog credentials are missing. Configure `SKILLSCOUT_CATALOG_TOKEN` (preferred) "
+            "or `VERCEL_OIDC_TOKEN` for the SkillScraper process, then retry; this is not a "
             "no-skill decision."
         )
     except CatalogCredentialsRejectedError:
@@ -247,3 +247,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

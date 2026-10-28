@@ -176,7 +176,7 @@ async def prepare_task(
     except CatalogCredentialsMissingError:
         return _prepare_error(
             "catalog_credentials_missing",
-            "The catalog requires credentials; configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN",
+            "The catalog requires credentials; configure SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN",
             task=task,
         )
     except CatalogCredentialsRejectedError:
@@ -294,7 +294,7 @@ async def inspect_skill(
     except CatalogCredentialsMissingError:
         return _inspect_error(
             "catalog_credentials_missing",
-            "The catalog requires credentials; configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN",
+            "The catalog requires credentials; configure SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN",
         )
     except CatalogCredentialsRejectedError:
         return _inspect_error(
@@ -583,7 +583,7 @@ def _prepare_error(
         task=_safe_text(redact_secrets(task), MAX_TASK_CHARS) if task else None,
         explanation="SkillScraper did not complete a recommendation.",
         next_action=(
-            "Configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN for the SkillScraper process "
+            "Configure SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN for the SkillScraper process "
             "and retry; no catalog request was sent."
             if code == "catalog_credentials_missing"
             else "Resolve the reported issue and retry; do not treat this failure as NO_SKILL_NEEDED."
@@ -598,7 +598,7 @@ def _inspect_error(code: str, message: str) -> InspectSkillResult:
         decision=None,
         explanation="SkillScraper did not complete the inspection.",
         next_action=(
-            "Configure VERCEL_OIDC_TOKEN or SKILLSCOUT_CATALOG_TOKEN for the SkillScraper process "
+            "Configure SKILLSCOUT_CATALOG_TOKEN (preferred) or VERCEL_OIDC_TOKEN for the SkillScraper process "
             "and retry; no catalog request was sent."
             if code == "catalog_credentials_missing"
             else "Resolve the reported issue and retry; no inspection decision is available."
