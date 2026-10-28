@@ -1,7 +1,7 @@
 [project]
-name = "skillscout"
+name = "skillscraper"
 version = "0.1.0"
-description = "Local-first skill recommendations with inspectable evidence"
+description = "Evidence-based discovery, inspection and selection of relevant skills for coding agents"
 readme = "README.md"
 requires-python = ">=3.12"
 classifiers = [
@@ -26,6 +26,7 @@ dev = [
 ]
 
 [project.scripts]
+skillscraper = "skillscout.entrypoint:cli_main"
 skillscout = "skillscout.entrypoint:cli_main"
 skillscout-mcp = "skillscout.mcp_entrypoint:main"
 skillscout-codex-hook = "skillscout.codex_hook_entrypoint:main"

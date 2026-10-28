@@ -1,5 +1,7 @@
 # Verification snapshots
 
+Historical verification records below use SkillScout for the product and commands tested at the time. The current product name is SkillScraper; dated observations, commands, artifacts, and results remain unchanged.
+
 ## Routine fast-path and Codex invocation check
 
 ### Follow-up protocol (recorded before the follow-up probes)

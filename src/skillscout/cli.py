@@ -1,4 +1,4 @@
-"""Typer command-line interface for SkillScout."""
+"""Typer command-line interface for SkillScraper."""
 
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ from skillscout.report import (
 )
 
 app = typer.Typer(
-    name="skillscout",
-    help="Find and inspect agent skills without installing or activating them.",
+    name="skillscraper",
+    help="SkillScraper helps coding agents discover and inspect relevant skills with evidence.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -183,10 +183,10 @@ def mcp_command() -> None:
 
 @app.callback(invoke_without_command=True)
 def main(
-    version: bool = typer.Option(False, "--version", help="Show the SkillScout version and exit."),
+    version: bool = typer.Option(False, "--version", help="Show the SkillScraper version and exit."),
 ) -> None:
     if version:
-        typer.echo(f"SkillScout {__version__}")
+        typer.echo(f"SkillScraper {__version__}")
         raise typer.Exit()
 
 

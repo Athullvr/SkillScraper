@@ -1,5 +1,7 @@
 # SkillScout release-candidate verification — 2026-10-25
 
+Historical SkillScout snapshot recorded on 2026-10-25. The current product and distribution name is SkillScraper. Artifact names, commands, test results, and evidence below are retained as they were observed; this note does not revise those results or remove any release blocker.
+
 This report records the current checkout verification for a controlled developer pilot. It does not authorize publication or public reliability claims.
 
 ## Verified snapshot and completed milestone

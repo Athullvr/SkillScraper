@@ -44,9 +44,9 @@ def _skillscout(payload: dict[str, Any], request: dict[str, Any]) -> dict[str, o
     if not _before_deadline(request):
         return {"status": "not_started", "category": "pairing_deadline_expired_before_second_arm_start"}
     if not _invocation_cap_remaining(request):
-        return _error("invocation_timeout", "confirmed", "invocation cap expired before SkillScout dispatch")
+        return _error("invocation_timeout", "confirmed", "invocation cap expired before SkillScraper dispatch")
     if set(payload) != {"task", "project_path"}:
-        return _error("system_input_boundary_error", "confirmed", "no SkillScout operation was dispatched")
+        return _error("system_input_boundary_error", "confirmed", "no SkillScraper operation was dispatched")
     try:
         from skillscout.mcp_server import prepare_task
 
@@ -56,8 +56,8 @@ def _skillscout(payload: dict[str, Any], request: dict[str, Any]) -> dict[str, o
     if result.status != "success" or result.decision is None:
         code = result.error.code if result.error is not None else "skillscout_invalid_response"
         if code in {"invalid_input", "project_path_error", "configuration_error"}:
-            return _error(code, "confirmed", "SkillScout returned before a catalog operation was started")
-        return _error(code, "unknown", "SkillScout returned an operational error without request termination telemetry")
+            return _error(code, "confirmed", "SkillScraper returned before a catalog operation was started")
+        return _error(code, "unknown", "SkillScraper returned an operational error without request termination telemetry")
     candidates = []
     termination_uncertain = False
     for position, item in enumerate(result.recommendations[:3], start=1):
@@ -87,10 +87,10 @@ def _skillscout(payload: dict[str, Any], request: dict[str, Any]) -> dict[str, o
             "internal_attempt_count": None,
             "termination_status": "unknown" if termination_uncertain else "confirmed",
             "termination_evidence": (
-                "SkillScout returned but one or more nested evidence states were unavailable; "
+                "SkillScraper returned but one or more nested evidence states were unavailable; "
                 "underlying request termination is not independently observable"
                 if termination_uncertain
-                else "SkillScout returned a validated terminal prepare_task result"
+                else "SkillScraper returned a validated terminal prepare_task result"
             ),
         },
     }

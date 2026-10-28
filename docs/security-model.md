@@ -2,7 +2,7 @@
 
 ## Trust boundaries
 
-Catalog search responses, skill descriptions, skill files, external audit results, and optional LLM responses are untrusted input. Pydantic validation rejects malformed required fields; catalog response bodies and inspected file counts/content sizes are bounded. Skill files are treated as text only. SkillScout never executes scripts, hooks, shell commands, candidate instructions, or install commands.
+Catalog search responses, skill descriptions, skill files, external audit results, and optional LLM responses are untrusted input. Pydantic validation rejects malformed required fields; catalog response bodies and inspected file counts/content sizes are bounded. Skill files are treated as text only. SkillScraper never executes scripts, hooks, shell commands, candidate instructions, or install commands.
 
 ## Evidence and policy
 
@@ -41,5 +41,5 @@ MCP recommendation calls disable the optional LLM adapter even when its environm
 
 The default packet budget is 1200 UTF-8 bytes of excerpt bodies, capped at 2400 bytes and three excerpts of at most 600 bytes each. Packet `used_bytes` counts only encoded excerpt strings, not the JSON metadata or wrapper. Per-file scanner findings and incomplete-coverage notes accompany excerpts as warnings. They may apply to the whole file rather than the exact passage. The packet is evidence from untrusted catalog content, never trusted instructions. Excerpt selection does not affect the candidate decision. A clean heuristic scan is not proof of safety, and a suspicious excerpt can still be returned so the warning and source text remain visible.
 
-The documented skills.sh API credential is a short-lived Vercel OIDC bearer token. Vercel documents enabling OIDC Federation and using `vercel link` plus `vercel env pull` for local development. SkillScout reads `VERCEL_OIDC_TOKEN` (or the `SKILLSCOUT_CATALOG_TOKEN` bearer-token override) from its process environment at startup; it does not parse `.env.local` or refresh the token. Do not put credentials in tool inputs, chat, or checked-in agent configuration. No alternate catalog source has been validated; the configurable base URL still has to implement the skills.sh v1 API contract.
+The documented skills.sh API credential is a short-lived Vercel OIDC bearer token. Vercel documents enabling OIDC Federation and using `vercel link` plus `vercel env pull` for local development. SkillScraper reads `VERCEL_OIDC_TOKEN` (or the retained `SKILLSCOUT_CATALOG_TOKEN` bearer-token override) from its process environment at startup; it does not parse `.env.local` or refresh the token. Do not put credentials in tool inputs, chat, or checked-in agent configuration. No alternate catalog source has been validated; the configurable base URL still has to implement the skills.sh v1 API contract.
 

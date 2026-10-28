@@ -143,10 +143,14 @@ def write_run(
         if pair is None or pair.task_id != _crosswalk_value(entry, "task_id") or pair.repetition != _crosswalk_value(entry, "repetition"):
             raise RunStoreError("decision crosswalk entry does not match a planned task/pair")
         if arm != "skillscout" or not key or pair_id in seen_decision_pairs or key in decision_keys:
-            raise RunStoreError("decision crosswalk keys must be unique and map to SkillScout only")
+            raise RunStoreError(
+                "decision crosswalk keys must be unique and map to SkillScraper only"
+            )
         scout = next(item for name, item in pair.arms.items() if name.value == "skillscout")
         if not scout.primary_response_valid or scout.decision is None:
-            raise RunStoreError("decision packets may be linked only to valid non-null SkillScout decisions")
+            raise RunStoreError(
+                "decision packets may be linked only to valid non-null SkillScraper decisions"
+            )
         seen_decision_pairs.add(pair_id)
         decision_keys.add(key)
     candidate_keys = {str(item[0]) for item in observed_crosswalk}

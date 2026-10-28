@@ -111,7 +111,9 @@ _PROTECTED_FIELD_TEXT = re.compile(
     r"audit(?:[_ -]?(?:status|finding|result|verdict))?|scanner(?:[_ -]?(?:status|finding|result|verdict)))\b\s*[:=]"
 )
 _PROTECTED_FINDING_TEXT = re.compile(r"(?i)\b(?:protected\s+)?(?:safety|audit|scanner)\s+(?:finding|status|result|verdict)\b")
-_SYSTEM_IDENTITY_TEXT = re.compile(r"(?i)\b(?:SkillScout(?![-_][A-Za-z0-9])|ordinary[ _-]+search|skills\.sh)\b")
+_SYSTEM_IDENTITY_TEXT = re.compile(
+    r"(?i)\b(?:(?:SkillScout|SkillScraper)(?![-_][A-Za-z0-9])|ordinary[ _-]+search|skills\.sh)\b"
+)
 _RANKING_METADATA_TEXT = re.compile(
     r"(?i)\b(?:rank(?:ed|ing)?|result\s+position|score|popularity|install(?:ation)?\s+count|"
     r"download\s+count|search\s+order)\b(?:\s*(?:was|is|of|=|:|#)\s*[^\s,.;]+)?"

@@ -1,4 +1,4 @@
-"""Process-isolated adapter for real SkillScout and catalog operations.
+"""Process-isolated adapter for real SkillScraper and catalog operations.
 
 The adapter is intentionally not invoked by the offline CLI. It bridges the
 production application operations to the recorder callback interfaces while
@@ -91,7 +91,7 @@ class RuntimeAdapter:
         not_after_monotonic_s: float | None = None,
         invocation_deadline_monotonic_s: float | None = None,
     ) -> InvocationReturn:
-        self._require_keys(payload, {"task", "project_path"}, "SkillScout")
+        self._require_keys(payload, {"task", "project_path"}, "SkillScraper")
         result = self._execute(
             "skillscout",
             payload,

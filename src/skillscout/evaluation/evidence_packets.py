@@ -166,7 +166,9 @@ _DISCLOSED_DECISION_RE = re.compile(
     r"(?i)\bexpected\s+(?:task(?:-level)?\s+)?(?:decision|label|outcome)\b.{0,80}\b"
     r"(?:NO_SKILL_NEEDED|USE|REVIEW|AVOID)\b"
 )
-_SYSTEM_IDENTITY_RE = re.compile(r"(?i)\b(?:SkillScout(?![-_][A-Za-z0-9])|ordinary[ _-]+search|skills\.sh)\b")
+_SYSTEM_IDENTITY_RE = re.compile(
+    r"(?i)\b(?:(?:SkillScout|SkillScraper)(?![-_][A-Za-z0-9])|ordinary[ _-]+search|skills\.sh)\b"
+)
 _RANKING_METADATA_RE = re.compile(
     r"(?i)\b(?:rank(?:ed|ing)?|result\s+position|score|popularity|install(?:ation)?\s+count|"
     r"download\s+count|search\s+order)\b(?:\s*(?:was|is|of|=|:|#)\s*[^\s,.;]+)?"

@@ -518,7 +518,7 @@ def render_run_report(run: Mapping[str, Any]) -> str:
     groups = metrics["evaluation_groups"]
     include_held_out = run["configuration"]["include_held_out"]
     lines = [
-        "# SkillScout offline calibration run",
+        "# SkillScraper offline calibration run",
         "",
         f"- Dataset: `{run['dataset']['id']}` v{run['dataset']['version']} ({run['dataset']['data_kind']})",
         f"- Dataset SHA-256: `{run['dataset']['sha256']}`",
@@ -643,7 +643,7 @@ def render_comparison_report(comparison: Mapping[str, Any]) -> str:
     """Render decision, ranking, category, and safety/evidence deltas."""
     delta = comparison["metric_changes"]
     lines = [
-        "# SkillScout calibration comparison",
+        "# SkillScraper calibration comparison",
         "",
         f"- Dataset: `{comparison['dataset']['id']}` v{comparison['dataset']['version']}",
         f"- Baseline run: `{comparison['baseline_run_id']}`",

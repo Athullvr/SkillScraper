@@ -84,7 +84,7 @@ def _explain(
             reason = "No skill file set was inspected because detail retrieval failed."
             steps = [
                 "Retry after catalog access is available; if detail remains unavailable, review the linked source manually.",
-                "Do not treat missing content as a clean inspection; SkillScout cannot inspect content it could not retrieve.",
+                "Do not treat missing content as a clean inspection; SkillScraper cannot inspect content it could not retrieve.",
             ]
         else:
             reason = (
@@ -92,7 +92,7 @@ def _explain(
             )
             steps = [
                 "Retry detail retrieval and check whether the catalog returns the full bounded file set, including non-empty SKILL.md.",
-                "If it remains incomplete or exceeds scanner limits, review the source manually; SkillScout cannot certify this snapshot as complete.",
+                "If it remains incomplete or exceeds scanner limits, review the source manually; SkillScraper cannot certify this snapshot as complete.",
             ]
         unresolved.append(
             MCPUnresolvedEvidence(
@@ -234,7 +234,7 @@ def _explain(
             )
             compatibility_steps = [
                 "Confirm that the project intentionally uses both stacks or choose a skill for the detected framework.",
-                "SkillScout reads bounded metadata only and cannot verify a mixed stack by inspecting source files or running the project.",
+                "SkillScraper reads bounded metadata only and cannot verify a mixed stack by inspecting source files or running the project.",
             ]
         else:
             compatibility_reason = (
@@ -242,7 +242,7 @@ def _explain(
             )
             compatibility_steps = [
                 "Confirm the project's framework and relevant versions from its declared metadata.",
-                "If compatibility depends on source or runtime behavior, review that manually; SkillScout does not inspect or execute project source.",
+                "If compatibility depends on source or runtime behavior, review that manually; SkillScraper does not inspect or execute project source.",
             ]
         unresolved.append(
             MCPUnresolvedEvidence(
@@ -333,7 +333,7 @@ def _explain(
         relevance_gap = MCPUnresolvedEvidence(
             category="task_relevance",
             status="below_threshold",
-            reason="The candidate did not meet SkillScout's initial task-relevance threshold.",
+            reason="The candidate did not meet SkillScraper's initial task-relevance threshold.",
             next_steps=[
                 "If the task has a concrete framework or specialist constraint, include it and request a fresh recommendation; otherwise continue without this skill.",
                 "Do not treat a low-relevance candidate's other evidence as a reason to use it.",
@@ -415,7 +415,7 @@ def _audit_explanation(
         gap = MCPUnresolvedEvidence(
             category="external_audit",
             status="stale",
-            reason="The revision-bound audit is older than SkillScout's 90-day freshness window.",
+            reason="The revision-bound audit is older than SkillScraper's 90-day freshness window.",
             next_steps=[
                 "Obtain a fresh audit for the exact inspected content hash and re-run inspection.",
                 "Until then, treat the old audit as stale evidence, not as a current pass.",
@@ -448,7 +448,7 @@ def _audit_explanation(
             reason = "Available audit evidence cannot be fully bound to a fresh inspected revision."
             steps = [
                 "Obtain audit evidence with a revision matching the inspected hash and a valid timezone-aware timestamp.",
-                "If such evidence is not available, have the exact revision reviewed independently; SkillScout cannot create audits.",
+                "If such evidence is not available, have the exact revision reviewed independently; SkillScraper cannot create audits.",
             ]
         return (
             status,
@@ -465,7 +465,7 @@ def _audit_explanation(
             reason="The catalog did not provide usable audit evidence for this inspection.",
             next_steps=[
                 "Retry when authorized catalog access is available, or arrange an independent review tied to the inspected hash.",
-                "SkillScout cannot issue an audit; missing audit data is not a pass.",
+                "SkillScraper cannot issue an audit; missing audit data is not a pass.",
             ],
         )
         return (

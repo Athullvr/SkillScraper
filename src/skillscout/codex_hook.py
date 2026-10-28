@@ -1,4 +1,4 @@
-"""Opt-in Codex UserPromptSubmit adapter for SkillScout recommendations.
+"""Opt-in Codex UserPromptSubmit adapter for SkillScraper recommendations.
 
 The hook is deliberately fail-closed with respect to recommendation status:
 malformed events and operational errors become REVIEW context, never an implicit
@@ -65,17 +65,17 @@ def handle_event(payload: object) -> dict[str, object]:
     except ProjectContextError:
         return _review(
             "the project directory could not be read safely. Check the path and run "
-            "`skillscout doctor`; this is not a no-skill decision."
+            "`skillscraper doctor`; this is not a no-skill decision."
         )
     except ConfigurationError:
         return _review(
-            "local configuration is invalid. Run `skillscout doctor` and correct the named "
+            "local configuration is invalid. Run `skillscraper doctor` and correct the named "
             "setting; this is not a no-skill decision."
         )
     except CatalogCredentialsMissingError:
         return _review(
             "catalog credentials are missing. Configure `VERCEL_OIDC_TOKEN` or "
-            "`SKILLSCOUT_CATALOG_TOKEN` for the SkillScout process, then retry; this is not a "
+            "`SKILLSCOUT_CATALOG_TOKEN` for the SkillScraper process, then retry; this is not a "
             "no-skill decision."
         )
     except CatalogCredentialsRejectedError:
@@ -85,7 +85,7 @@ def handle_event(payload: object) -> dict[str, object]:
         )
     except CatalogAuthenticationError:
         return _review(
-            "catalog authentication is required. Configure authorized SkillScout credentials "
+            "catalog authentication is required. Configure authorized SkillScraper credentials "
             "and retry; this is not a no-skill decision."
         )
     except CatalogRateLimitError:
@@ -136,7 +136,7 @@ def handle_event(payload: object) -> dict[str, object]:
         # Hook output is visible to the host model. Never relay raw exception text,
         # which can include untrusted upstream content or environment values.
         return _review(
-            "the check failed unexpectedly. Run `skillscout doctor` and retry; this is not a "
+            "the check failed unexpectedly. Run `skillscraper doctor` and retry; this is not a "
             "no-skill decision."
         )
 
@@ -152,7 +152,7 @@ def handle_event(payload: object) -> dict[str, object]:
 
 
 def _review(reason: str) -> dict[str, object]:
-    return _response(f"SkillScout check is REVIEW: {reason}")
+    return _response(f"SkillScraper check is REVIEW: {reason}")
 
 
 def _hook_config() -> Config:
@@ -171,14 +171,14 @@ def _decision_context(report: Report, decision: Decision) -> str:
     candidate_ids = _candidate_ids(report)
     if decision == Decision.NO_SKILL_NEEDED:
         return (
-            "SkillScout returned NO_SKILL_NEEDED. Proceed with the host's normal coding workflow; "
+            "SkillScraper returned NO_SKILL_NEEDED. Proceed with the host's normal coding workflow; "
             "this is a task-fit result, not a safety assessment. No skill was installed or "
             "activated."
         )
     if decision == Decision.USE:
         ids = _format_ids(candidate_ids)
         return (
-            f"SkillScout returned USE{ids}. Treat the listing as evidence only: check task fit and "
+            f"SkillScraper returned USE{ids}. Treat the listing as evidence only: check task fit and "
             "inspect safety and compatibility before relying on a candidate. Do not install, "
             "activate, "
             "or execute skill content automatically; ask the user before installation."
@@ -186,13 +186,13 @@ def _decision_context(report: Report, decision: Decision) -> str:
     if decision == Decision.AVOID:
         ids = _format_ids(candidate_ids)
         return (
-            f"SkillScout returned AVOID{ids}. Do not use the flagged candidate(s). This does "
+            f"SkillScraper returned AVOID{ids}. Do not use the flagged candidate(s). This does "
             "not block completing the task through another safe method. Do not install, "
             "activate, or execute skills automatically."
         )
     ids = _format_ids(candidate_ids)
     return (
-        f"SkillScout returned REVIEW{ids}. Evidence is unresolved; this is not approval or a "
+        f"SkillScraper returned REVIEW{ids}. Evidence is unresolved; this is not approval or a "
         "safety pass. "
         "Do not rely on a specialist candidate without human review. Continue with normal "
         "capabilities or ask the user."

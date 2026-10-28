@@ -1,5 +1,7 @@
 # Public distribution and Codex integration follow-up — 2026-10-24
 
+Historical SkillScout snapshot recorded on 2026-10-24. The current product and distribution name is SkillScraper. Artifact names, package metadata, commands, dates, test results, and evidence below are retained as they were observed; this note does not revise those results.
+
 ## Package metadata and clean installs
 
 The existing Hatchling configuration builds both formats. The final artifacts are:

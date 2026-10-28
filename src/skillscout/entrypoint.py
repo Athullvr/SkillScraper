@@ -11,7 +11,7 @@ def cli_main() -> None:
         from skillscout.cli import app
     except ModuleNotFoundError:
         print(
-            "SkillScout's CLI dependencies are missing. Reinstall its wheel without "
+            "SkillScraper's CLI dependencies are missing. Reinstall its wheel without "
             "--no-deps so the declared dependencies are installed.",
             file=sys.stderr,
         )

@@ -123,7 +123,7 @@ def test_invalid_candidate_id_is_not_copied_into_model_context(monkeypatch):
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
-        (ConfigurationError("SECRET_CONFIG_VALUE"), "Run `skillscout doctor`"),
+        (ConfigurationError("SECRET_CONFIG_VALUE"), "Run `skillscraper doctor`"),
         (ProjectContextError("SECRET_PATH_VALUE"), "Check the path and run"),
         (CatalogCredentialsMissingError("SECRET_TOKEN_VALUE"), "credentials are missing"),
         (CatalogCredentialsRejectedError("SECRET_TOKEN_VALUE"), "credentials were rejected"),

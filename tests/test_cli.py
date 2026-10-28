@@ -7,7 +7,8 @@ import pytest
 
 from typer.testing import CliRunner
 
-from skillscout import entrypoint
+from skillscout import cli, entrypoint
+from skillscout.config import Config
 from skillscout.cli import app
 
 runner = CliRunner()
@@ -30,7 +31,41 @@ def test_version_option_works_without_a_subcommand():
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "SkillScout 0.1.0"
+    assert result.stdout.strip() == "SkillScraper 0.1.0"
+
+
+def test_help_uses_the_canonical_product_name():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert result.stdout.lstrip().startswith("Usage: skillscraper ")
+    assert "SkillScraper helps coding agents" in result.stdout
+
+
+def test_doctor_uses_the_canonical_product_name_without_catalog_access(monkeypatch):
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: Config(
+            catalog_base_url="https://skills.sh",
+            catalog_token=None,
+            candidate_limit=3,
+            connect_timeout_seconds=5.0,
+            read_timeout_seconds=15.0,
+            max_response_bytes=2_000_000,
+            retry_count=2,
+            llm_api_key=None,
+            llm_base_url="https://api.openai.com/v1",
+            llm_model="test-model",
+            llm_send_task=False,
+        ),
+    )
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "SkillScraper doctor" in result.stdout
+    assert "Catalog credential" in result.stdout
 
 
 def test_json_errors_use_the_versioned_error_shape(tmp_path):

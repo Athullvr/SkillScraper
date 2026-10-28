@@ -1,5 +1,7 @@
 # Implementation and environment notes
 
+Historical implementation and verification entries below record the SkillScout package and commands as tested at the time. The current product and distribution name is SkillScraper; the `skillscout` Python import and legacy executable names remain supported.
+
 ## Initial implementation baseline (historical)
 
 Before implementation, the repository contained no application source, package metadata, README, test suite, or usable Git metadata. The `.git` entry was an empty directory placeholder, so there is no history or branch state to preserve and no commit operation is available. The environment provides Python 3.12.3 as `python3` and uv 0.12.10 as `uv`.

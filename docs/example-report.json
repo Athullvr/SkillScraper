@@ -82,7 +82,7 @@
         "Local content checks are heuristic and do not replace a comprehensive security review.",
         "External audit status is unknown because no result was available.",
         "One or more local heuristic warnings need human review.",
-        "The proposed install command is inert report text; SkillScout never executes it."
+        "The proposed install command is inert report text; SkillScraper never executes it."
       ],
       "proposed_install_command": "npx skills add https://github.com/example/agent-skills --skill fastapi-oauth --agent codex"
     }

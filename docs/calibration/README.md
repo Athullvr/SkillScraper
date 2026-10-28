@@ -1,4 +1,6 @@
-# SkillScout calibration and human review
+# SkillScraper calibration and human review
+
+The distribution and product are named SkillScraper. The `skillscout` Python import and `python -m skillscout.evaluation` commands remain as compatibility paths; persisted calibration schema IDs and historical evaluation records keep their original names.
 
 The offline calibration runner executes the production ranking and decision pipeline over bounded local fixtures. It disables optional LLM assessment, uses an in-memory catalog adapter, and makes no network requests. It does not tune thresholds or affect MCP requests.
 
@@ -33,7 +35,7 @@ Freeze a copy of the proposal and start a new ledger. The following commands cre
 During development, review only `development` examples. `review show`, `review submit`, and `review adjudicate` all refuse held-out examples unless `--include-held-out` is supplied. Leave those eight examples pending until implementation and analysis are frozen; the explicit flag is reserved for final evaluation.
 
 ```sh
-REVIEW_DIR="$(mktemp -d /tmp/skillscout-review.XXXXXX)"
+REVIEW_DIR="$(mktemp -d /tmp/skillscraper-review.XXXXXX)"
 DATASET="$REVIEW_DIR/dataset.json"
 REVIEWS="$REVIEW_DIR/reviews.jsonl"
 cp docs/calibration/v2/proposed-dataset.json "$DATASET"
@@ -42,7 +44,7 @@ python -m skillscout.evaluation calibrate review status "$DATASET" --reviews "$R
 python -m skillscout.evaluation calibrate review show "$DATASET" dev-003 --reviews "$REVIEWS"
 ```
 
-The `show` packet contains the task, project facts, search completeness, exact candidate listings, inspected excerpts, revision-bound audit evidence, SkillScout's current proposal, and its rationale/limitations. It identifies the label as pending and the review state as unreviewed. Reviewers should inspect the packet independently before recording a judgment.
+The `show` packet contains the task, project facts, search completeness, exact candidate listings, inspected excerpts, revision-bound audit evidence, SkillScraper's current proposal, and its rationale/limitations. It identifies the label as pending and the review state as unreviewed. Reviewers should inspect the packet independently before recording a judgment.
 
 Each reviewer must supply a non-identifying reviewer token and one of these outcomes:
 

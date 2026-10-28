@@ -1,5 +1,7 @@
 # SkillScout release readiness — 2026-10-24
 
+Historical SkillScout snapshot recorded on 2026-10-24. The current product and distribution name is SkillScraper. Artifact names, commands, test results, and evidence below are retained as they were observed; this note does not revise those results or the release status.
+
 ## Distribution and first run
 
 Built the wheel with the existing Hatchling configuration and installed it outside the checkout in a fresh Python 3.12.3 environment. The final artifact is `/tmp/skillscout-release-mcp-hrobb58j/final-dist/skillscout-0.1.0-py3-none-any.whl`.

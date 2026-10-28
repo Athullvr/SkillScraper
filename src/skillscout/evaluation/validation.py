@@ -164,7 +164,7 @@ def _validate_records_unchecked(
                 if arm_name is ArmName.ORDINARY_SEARCH and attempts != 1:
                     errors.append(f"{arm_label}: ordinary-search baseline must make one primary attempt")
                 if arm_name is ArmName.SKILLSCOUT and attempts > 3:
-                    errors.append(f"{arm_label}: observed SkillScout attempts exceed documented retry cap")
+                    errors.append(f"{arm_label}: observed SkillScraper attempts exceed documented retry cap")
 
             slots = list(_get(arm, "slots", ()))
             if len(slots) != SLOTS_PER_ARM or [int(_get(slot, "position", -1)) for slot in slots] != [1, 2, 3]:

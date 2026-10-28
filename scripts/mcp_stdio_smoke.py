@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Exercise an installed SkillScout MCP server over the stdio protocol.
+"""Exercise an installed SkillScraper MCP server over the stdio protocol.
 
 Run from a project environment that has the MCP SDK installed and pass a
-separate virtual environment containing the built SkillScout wheel:
+separate virtual environment containing the built SkillScraper wheel:
 
-    python scripts/mcp_stdio_smoke.py --venv /tmp/skillscout-clean-env
+    python scripts/mcp_stdio_smoke.py --venv /tmp/skillscraper-clean-env
 
 The test uses only local tasks and a fixture catalog. It does not need catalog
 credentials or make catalog requests.
@@ -27,7 +27,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 
 
 TOOL_NAMES = {"prepare_task", "inspect_skill", "doctor"}
-SECRET_MARKER = "skillscout-smoke-secret-marker"
+SECRET_MARKER = "skillscraper-smoke-secret-marker"
 
 
 def _structured(result: Any) -> dict[str, Any]:
@@ -124,6 +124,11 @@ async def _sdk_session(
         async with stdio_client(parameters, errlog=errlog) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 initialized = await asyncio.wait_for(session.initialize(), timeout=10)
+                server_info = getattr(initialized, "server_info", None) or getattr(
+                    initialized, "serverInfo", None
+                )
+                if getattr(server_info, "name", None) != "SkillScraper":
+                    raise RuntimeError("installed MCP server did not advertise SkillScraper")
                 listed = await asyncio.wait_for(session.list_tools(), timeout=10)
                 schemas = _tool_schema(listed.tools)
                 if set(schemas) != TOOL_NAMES:
@@ -280,6 +285,7 @@ async def _sdk_session(
                             initialized, "protocol_version", None
                         )
                         or getattr(initialized, "protocolVersion", None),
+                        "server_name": server_info.name,
                         "tools": sorted(schemas),
                         "doctor_status": doctor["status"],
                     }
@@ -373,7 +379,7 @@ async def _raw_protocol_check(
                     "params": {
                         "protocolVersion": "2025-11-25",
                         "capabilities": {},
-                        "clientInfo": {"name": "skillscout-smoke", "version": "1"},
+                        "clientInfo": {"name": "skillscraper-smoke", "version": "1"},
                     },
                 }
             )
@@ -381,6 +387,11 @@ async def _raw_protocol_check(
         initialized = await receive()
         if initialized.get("id") != 1 or "result" not in initialized:
             raise RuntimeError("MCP initialize did not return a JSON-RPC result")
+        server_info = initialized["result"].get("serverInfo") or initialized["result"].get(
+            "server_info"
+        )
+        if not isinstance(server_info, dict) or server_info.get("name") != "SkillScraper":
+            raise RuntimeError("raw MCP initialize did not advertise SkillScraper")
         await send(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
 
         await send("{malformed-json")
@@ -423,6 +434,7 @@ async def _raw_protocol_check(
             raise RuntimeError("server diagnostics echoed a configured secret marker")
         return {
             "malformed_json_recovery": "pass",
+            "server_name": server_info["name"],
             "sequential_raw_requests": 3,
             "graceful_eof_shutdown": "pass",
             "process_exit_code": process.returncode,
@@ -443,17 +455,68 @@ async def _run(venv: Path, timeout: float) -> dict[str, Any]:
     python = scripts / ("python.exe" if os.name == "nt" else "python")
     server = scripts / ("skillscout-mcp.exe" if os.name == "nt" else "skillscout-mcp")
     cli = scripts / ("skillscout.exe" if os.name == "nt" else "skillscout")
+    canonical_cli = scripts / ("skillscraper.exe" if os.name == "nt" else "skillscraper")
     hook = scripts / ("skillscout-codex-hook.exe" if os.name == "nt" else "skillscout-codex-hook")
-    if not python.is_file() or not server.is_file() or not cli.is_file() or not hook.is_file():
-        raise RuntimeError("the supplied environment is missing installed SkillScout entry points")
+    if (
+        not python.is_file()
+        or not server.is_file()
+        or not cli.is_file()
+        or not canonical_cli.is_file()
+        or not hook.is_file()
+    ):
+        raise RuntimeError("the supplied environment is missing installed SkillScraper entry points")
 
-    with tempfile.TemporaryDirectory(prefix="skillscout-mcp-smoke-") as directory:
+    with tempfile.TemporaryDirectory(prefix="skillscraper-mcp-smoke-") as directory:
         cwd = Path(directory)
         (cwd / "pyproject.toml").write_text(
             '[project]\nname="stdio-smoke-project"\ndependencies=["fastapi>=0.100"]\n',
             encoding="utf-8",
         )
         clean_env = _safe_environment(venv)
+        package_version = subprocess.run(
+            [
+                str(python),
+                "-c",
+                "from importlib.metadata import version; print(version('skillscraper'))",
+            ],
+            cwd=cwd,
+            env=clean_env,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+        cli_commands = {}
+        for name, command in (("skillscraper", canonical_cli), ("skillscout", cli)):
+            version_result = subprocess.run(
+                [str(command), "--version"],
+                cwd=cwd,
+                env=clean_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            expected_version = f"SkillScraper {package_version}"
+            if version_result.returncode != 0 or version_result.stdout.strip() != expected_version:
+                raise RuntimeError(f"{name} --version did not report {expected_version}")
+            doctor_result = subprocess.run(
+                [str(command), "doctor"],
+                cwd=cwd,
+                env=clean_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if (
+                doctor_result.returncode != 0
+                or "SkillScraper doctor" not in doctor_result.stdout
+                or "does not make network requests" not in doctor_result.stdout
+            ):
+                raise RuntimeError(f"{name} doctor failed its local-only check")
+            cli_commands[name] = {
+                "version": version_result.stdout.strip(),
+                "doctor": "pass; local configuration only",
+            }
         fixture_env = _safe_environment(venv, catalog_token=SECRET_MARKER)
         normal = await asyncio.wait_for(
             _sdk_session(
@@ -478,6 +541,7 @@ async def _run(venv: Path, timeout: float) -> dict[str, Any]:
         )
         hook_result = _codex_hook_check(hook, cwd, clean_env)
     return {
+        "cli_commands": cli_commands,
         "installed_entrypoint": normal,
         "fixture_backed_tools": fixture,
         "raw_protocol": raw,

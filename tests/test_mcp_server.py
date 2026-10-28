@@ -152,11 +152,15 @@ def _call_tool(name: str, arguments: dict):
 
 
 def test_server_initializes_and_discovers_only_expected_tools():
-    async def inspect_tools():
+    async def inspect_server():
         async with Client(mcp_server.server) as client:
-            return await client.list_tools()
+            return client.server_info, client.instructions, await client.list_tools()
 
-    result = asyncio.run(inspect_tools())
+    server_info, instructions, result = asyncio.run(inspect_server())
+    assert server_info is not None
+    assert server_info.name == "SkillScraper"
+    assert instructions is not None
+    assert "SkillScraper is an MCP server" in instructions
     assert {tool.name for tool in result.tools} == {"prepare_task", "inspect_skill", "doctor"}
     prepare = next(tool for tool in result.tools if tool.name == "prepare_task")
     budget_schema = prepare.input_schema["properties"]["context_budget_bytes"]

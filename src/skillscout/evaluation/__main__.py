@@ -1,4 +1,4 @@
-"""Command-line verification for offline SkillScout evaluation artifacts."""
+"""Command-line verification for offline SkillScraper evaluation artifacts."""
 
 from __future__ import annotations
 

@@ -208,6 +208,7 @@ def test_sensitive_and_protected_excerpt_text_is_withheld_and_never_serialized(t
     secret_texts = (
         "Candidate content contains AKIA1234567890ABCDEF and must not escape.",
         "Returned by SkillScout after rank #1; score 0.97 and popularity 9000.",
+        "Returned by SkillScraper after rank #1; score 0.97 and popularity 9000.",
         "Expected decision: AVOID for this task category.",
     )
     # Taint every occurrence for the same task/revision so another pair cannot supply a safe substitute.
@@ -236,7 +237,7 @@ def test_sensitive_and_protected_excerpt_text_is_withheld_and_never_serialized(t
         assert PROTECTED_AUDIT_TEXT[0] not in serialized
         assert "protected_text_withheld" not in serialized
         assert "protected_text_withheld" in json.dumps(bundle.restricted_payload(), ensure_ascii=False)
-        for marker in ("AKIA1234567890ABCDEF", "SkillScout", "rank #1", "score 0.97", "popularity 9000", "Expected decision: AVOID", "task category"):
+        for marker in ("AKIA1234567890ABCDEF", "SkillScout", "SkillScraper", "rank #1", "score 0.97", "popularity 9000", "Expected decision: AVOID", "task category"):
             assert marker not in serialized
         reviewer_path, _ = write_review_packet_artifacts(
             bundle,
@@ -245,7 +246,7 @@ def test_sensitive_and_protected_excerpt_text_is_withheld_and_never_serialized(t
         )
         serialized_file = reviewer_path.read_text(encoding="utf-8")
         assert PROTECTED_AUDIT_TEXT[0] not in serialized_file
-        for marker in ("AKIA1234567890ABCDEF", "SkillScout", "rank #1", "score 0.97", "popularity 9000", "Expected decision: AVOID"):
+        for marker in ("AKIA1234567890ABCDEF", "SkillScout", "SkillScraper", "rank #1", "score 0.97", "popularity 9000", "Expected decision: AVOID"):
             assert marker not in serialized_file
 
 
@@ -801,6 +802,7 @@ def test_legacy_packet_builder_also_fails_closed_on_arm_and_ranking_disclosures(
 
     for text in (
         "This candidate was returned by SkillScout.",
+        "This candidate was returned by SkillScraper.",
         "Result rank #1; score 0.8; popularity 500.",
     ):
         with pytest.raises(ReviewError):

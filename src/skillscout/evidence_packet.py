@@ -103,7 +103,7 @@ def build_evidence_packet(
             status="unavailable",
             explanation=(
                 "Retrieved detail identity or hash did not match the inspection evidence; "
-                "SkillScout omitted excerpts to avoid mixing revisions."
+                "SkillScraper omitted excerpts to avoid mixing revisions."
             ),
         )
 
@@ -161,7 +161,7 @@ def build_evidence_packet(
             status="empty",
             explanation=(
                 "No inspected paragraph matched task terms under the deterministic selector, "
-                "so SkillScout could not justify an excerpt."
+                "so SkillScraper could not justify an excerpt."
             ),
         )
 

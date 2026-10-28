@@ -1,4 +1,4 @@
-"""Console entry point for SkillScout's stdio MCP server."""
+"""Console entry point for SkillScraper's stdio MCP server."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ def main() -> None:
         from skillscout.mcp_server import run_stdio
     except ImportError:
         print(
-            "SkillScout MCP support could not load a required runtime dependency. "
+            "SkillScraper MCP support could not load a required runtime dependency. "
             "Reinstall its wheel without --no-deps so the declared dependencies are installed.",
             file=sys.stderr,
         )

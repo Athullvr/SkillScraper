@@ -250,7 +250,7 @@ class CatalogClient:
                 "SKILLSCOUT_CATALOG_TOKEN before catalog-backed requests"
             )
         url = f"{self.config.catalog_base_url}{endpoint}"
-        headers = {"Accept": "application/json", "User-Agent": "SkillScout/0.1.0"}
+        headers = {"Accept": "application/json", "User-Agent": "SkillScraper/0.1.0"}
         headers["Authorization"] = f"Bearer {self.config.catalog_token}"
         request_timeout = self.config.request_timeout_seconds
         timeout = httpx.Timeout(
@@ -326,7 +326,7 @@ class CatalogClient:
                 except CatalogUnavailableError as wait_error:
                     if exc.status_code == 429:
                         raise CatalogRateLimitError(
-                            "catalog rate limit requested a wait beyond SkillScout's "
+                            "catalog rate limit requested a wait beyond SkillScraper's "
                             "bounded retry window"
                         ) from wait_error
                     raise

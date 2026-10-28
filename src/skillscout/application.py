@@ -1,4 +1,4 @@
-"""Shared, presentation-independent SkillScout application workflows."""
+"""Shared, presentation-independent SkillScraper application workflows."""
 
 from __future__ import annotations
 

@@ -15,8 +15,8 @@ def main() -> None:
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
                 "additionalContext": (
-                    "SkillScout check is REVIEW: hook dependencies are missing. Reinstall "
-                    "the SkillScout wheel without `--no-deps` so declared dependencies are "
+                    "SkillScraper check is REVIEW: hook dependencies are missing. Reinstall "
+                    "the SkillScraper wheel without `--no-deps` so declared dependencies are "
                     "installed; no recommendation was made."
                 ),
             }

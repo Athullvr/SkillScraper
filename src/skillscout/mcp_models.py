@@ -1,4 +1,4 @@
-"""Compact, versioned response models for SkillScout's MCP tools."""
+"""Compact, versioned response models for SkillScraper's MCP tools."""
 
 from __future__ import annotations
 

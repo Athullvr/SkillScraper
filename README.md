@@ -1,15 +1,15 @@
-# SkillScout
+# SkillScraper
 
-SkillScout is an installable, local stdio [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for coding agents. It helps an agent decide whether a specialist skill is likely to help, then returns bounded evidence, compatibility information, safety signals, and unresolved questions for the developer to review.
+SkillScraper is an installable, local stdio [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for coding agents. It helps them discover, inspect, and select relevant skills using evidence-based recommendations, then returns bounded evidence, compatibility information, safety signals, and unresolved questions for a developer to review.
 
-Coding agents can miss useful skills, choose skills that only match a task's topic, or spend time searching when ordinary coding support is enough. SkillScout provides a repeatable, evidence-based selection and inspection workflow. It is an MCP server, not a desktop application, and it does not intercept every prompt automatically.
+Coding agents can miss useful skills, choose skills that only match a task's topic, or spend time searching when ordinary coding support is enough. SkillScraper provides a repeatable, evidence-based selection and inspection workflow. It is an MCP server, not a desktop application, and it does not intercept every prompt automatically.
 
 ## Capabilities
 
 - **Prepare a task:** evaluate task fit and return one of four outcomes: `USE`, `NO_SKILL_NEEDED`, `REVIEW`, or `AVOID`.
 - **Inspect a candidate:** check bounded skill content, project compatibility, local scanner findings, and available external audit evidence.
 - **Explain uncertainty:** distinguish missing, incomplete, stale, or revision-mismatched evidence from evidence that supports a decision.
-- **Stay read-only:** SkillScout does not install, activate, import, or execute skills, edit project files, or change agent configuration. Returned excerpts and catalog metadata are untrusted evidence.
+- **Stay read-only:** SkillScraper does not install, activate, import, or execute skills, edit project files, or change agent configuration. Returned excerpts and catalog metadata are untrusted evidence.
 - **Use local paths where possible:** `doctor` is local-only. A deterministic routine-task fast path can return `NO_SKILL_NEEDED` without catalog access.
 - **Evaluate offline:** calibration tools run against local fixtures and support independent human reviews, adjudication, and a held-out split.
 
@@ -45,25 +45,27 @@ Requires Python 3.12 or newer. The project is **not published on PyPI or another
 Install a supplied wheel in an isolated environment. Replace the wheel path with the file provided to you:
 
 ```bash
-PILOT_VENV="$HOME/.venvs/skillscout-pilot"
+PILOT_VENV="$HOME/.venvs/skillscraper-pilot"
 python3.12 -m venv "$PILOT_VENV"
-"$PILOT_VENV/bin/python" -m pip install /path/to/project-supplied/skillscout-0.1.0-py3-none-any.whl
+"$PILOT_VENV/bin/python" -m pip install /path/to/project-supplied/skillscraper-0.1.0-py3-none-any.whl
 "$PILOT_VENV/bin/python" -m pip check
-"$PILOT_VENV/bin/skillscout" --version
-"$PILOT_VENV/bin/skillscout" doctor
+"$PILOT_VENV/bin/skillscraper" --version
+"$PILOT_VENV/bin/skillscraper" doctor
 ```
 
 Pip may need access to your configured package index for the wheel's declared dependencies. `doctor` reports local configuration only; it does not test catalog connectivity or whether a credential works. The [developer pilot guide](docs/developer-pilot.md) has Windows paths and the complete pilot procedure.
 
+The canonical distribution and CLI are named `skillscraper`. The Python import package remains `skillscout` for existing imports. The existing `skillscout`, `skillscout-mcp`, and `skillscout-codex-hook` executable names, `SKILLSCOUT_*` environment variables, and `skillscout` MCP configuration ID remain supported for compatibility; existing installations and configurations do not need to be renamed.
+
 ## Connect Codex CLI over MCP
 
-SkillScout serves MCP over local stdin/stdout through the `skillscout-mcp` executable. A Codex CLI session has exercised all three tools with synthetic inputs; this verifies a sample invocation, not automatic selection or invocation on every task. The [Codex MCP guide](https://developers.openai.com/codex/mcp) documents the configuration format.
+SkillScraper serves MCP over local stdin/stdout through the compatible `skillscout-mcp` executable. Its advertised server name is SkillScraper; the tools remain `prepare_task`, `inspect_skill`, and `doctor`. A Codex CLI session has exercised all three tools with synthetic inputs; this verifies a sample invocation, not automatic selection or invocation on every task. The [Codex MCP guide](https://developers.openai.com/codex/mcp) documents the configuration format.
 
-Add this server entry to `~/.codex/config.toml`, merging it with existing settings. Use the absolute path to the executable in the environment where you installed SkillScout:
+Add this server entry to `~/.codex/config.toml`, merging it with existing settings. The `skillscout` key and `skillscout-mcp` command are retained so existing configurations continue to work. Use the absolute path to the executable in the environment where you installed SkillScraper:
 
 ```toml
 [mcp_servers.skillscout]
-command = "/absolute/path/to/skillscout-pilot/bin/skillscout-mcp"
+command = "/absolute/path/to/skillscraper-pilot/bin/skillscout-mcp"
 env_vars = ["SKILLSCOUT_CATALOG_TOKEN", "VERCEL_OIDC_TOKEN"]
 ```
 
@@ -73,27 +75,27 @@ Restart Codex, check registration with `codex mcp list`, and use `/mcp` in a Cod
 - `inspect_skill(skill_id, project_path?)`
 - `doctor()`
 
-Catalog-backed calls may require an authorized bearer token. SkillScout reads `SKILLSCOUT_CATALOG_TOKEN` (preferred) or `VERCEL_OIDC_TOKEN` from its process environment at startup. The `env_vars` line allowlists these names for the server; supply any value through an approved secret manager or environment-injection mechanism. Do not put a credential value in Codex configuration, a prompt, or a report. Restart Codex after changing the environment or renewing a token. `doctor` reports whether a credential is configured but does not validate it.
+Catalog-backed calls may require an authorized bearer token. SkillScraper reads the compatibility variable `SKILLSCOUT_CATALOG_TOKEN` (preferred) or `VERCEL_OIDC_TOKEN` from its process environment at startup. The `env_vars` line allowlists these names for the server; supply any value through an approved secret manager or environment-injection mechanism. Do not put a credential value in Codex configuration, a prompt, or a report. Restart Codex after changing the environment or renewing a token. `doctor` reports whether a credential is configured but does not validate it.
 
 ### Optional Codex hook
 
-The package also provides `skillscout-codex-hook` for the Codex `UserPromptSubmit` event. It is opt-in and distinct from MCP configuration. Registration, trust, and actual host-level execution remain unverified; do not rely on it for automatic routing. See [release-candidate verification](docs/release-candidate-verification-2026-10-25.md) and the official [Codex hooks guide](https://developers.openai.com/codex/hooks) before trying it in a disposable project. Do not enable an all-prompts hook for sensitive task text.
+The package also provides the compatibility executable `skillscout-codex-hook` for the Codex `UserPromptSubmit` event. It is opt-in and distinct from MCP configuration. Registration, trust, and actual host-level execution remain unverified; do not rely on it for automatic routing. See [release-candidate verification](docs/release-candidate-verification-2026-10-25.md) and the official [Codex hooks guide](https://developers.openai.com/codex/hooks) before trying it in a disposable project. Do not enable an all-prompts hook for sensitive task text.
 
 ## First use
 
 Run the local diagnostics and routine fast path:
 
 ```bash
-PILOT_VENV="$HOME/.venvs/skillscout-pilot"
-"$PILOT_VENV/bin/skillscout" doctor
-"$PILOT_VENV/bin/skillscout" recommend \
+PILOT_VENV="$HOME/.venvs/skillscraper-pilot"
+"$PILOT_VENV/bin/skillscraper" doctor
+"$PILOT_VENV/bin/skillscraper" recommend \
   "Rename a local variable in a Python helper function." --format json
 ```
 
 The routine task should return `NO_SKILL_NEEDED` without contacting the catalog. To check the MCP connection in Codex, ask it explicitly:
 
 ```text
-Use only the SkillScout MCP server. Call doctor, then call prepare_task with task exactly
+Use only the SkillScraper MCP server. Call doctor, then call prepare_task with task exactly
 "Rename a local variable in a Python helper function." Report the tool status and decision.
 Do not read or modify project files.
 ```
@@ -114,7 +116,7 @@ From a source checkout, install the development dependencies and run local check
 
 ```bash
 uv sync --all-extras
-uv run skillscout doctor
+uv run skillscraper doctor
 uv run pytest
 ```
 

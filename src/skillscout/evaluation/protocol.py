@@ -193,7 +193,7 @@ def ordinary_search_input(task_text: str) -> dict[str, object]:
 
 
 def skillscout_input(task_text: str, opaque_project_path: str | Path) -> dict[str, object]:
-    """SkillScout sees task text and a project path; evaluator row data is never copied."""
+    """SkillScraper sees task text and a project path; evaluator row data is never copied."""
     return {"task": task_text, "project_path": str(opaque_project_path)}
 
 

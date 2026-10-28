@@ -65,7 +65,7 @@ def render_inspection(report: SkillInspectionReport, *, console: Console | None 
 
 def render_doctor(report: DoctorReport, *, console: Console | None = None) -> None:
     console = console or Console(highlight=False)
-    console.print("[bold]SkillScout doctor[/bold]")
+    console.print("[bold]SkillScraper doctor[/bold]")
     lines = [
         ("Python", f"{report.python_version} ({'supported' if report.python_supported else 'unsupported'})"),
         ("Catalog", str(report.catalog_url)),

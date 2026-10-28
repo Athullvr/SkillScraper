@@ -1,4 +1,4 @@
-"""Allow running SkillScout with ``python -m skillscout``."""
+"""Allow running SkillScraper with the compatible ``python -m skillscout`` path."""
 
 from skillscout.cli import app
 

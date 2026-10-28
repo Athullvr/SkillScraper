@@ -59,7 +59,7 @@ def incomplete_search_report(
         project=project,
         decision=Decision.REVIEW,
         summary=(
-            "The catalog search was incomplete; SkillScout cannot determine whether a skill would help."
+            "The catalog search was incomplete; SkillScraper cannot determine whether a skill would help."
         ),
         candidates=[],
         limitations=[
@@ -295,7 +295,7 @@ def build_candidate_report(
     command = proposed_install_command(skill, agent)
     if not command.startswith("Unavailable:"):
         limitations.append(
-            "The proposed install command is inert report text; SkillScout never executes it."
+            "The proposed install command is inert report text; SkillScraper never executes it."
         )
     return CandidateReport(
         skill=skill,
