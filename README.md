@@ -1,6 +1,6 @@
 # SkillScraper
 
-SkillScraper is an installable, local stdio [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for coding agents. It helps them discover, inspect, and select relevant skills using evidence-based recommendations, then returns bounded evidence, compatibility information, safety signals, and unresolved questions for a developer to review.
+SkillScraper is an [MCP](https://modelcontextprotocol.io/) service for coding agents, with a hosted Streamable HTTP backend and a compatible local stdio server for development. It helps agents discover, inspect, and select relevant skills using evidence-based recommendations, then returns bounded evidence, compatibility information, safety signals, and unresolved questions for a developer to review.
 
 Coding agents can miss useful skills, choose skills that only match a task's topic, or spend time searching when ordinary coding support is enough. SkillScraper provides a repeatable, evidence-based selection and inspection workflow. It is an MCP server, not a desktop application, and it does not intercept every prompt automatically.
 
@@ -55,7 +55,13 @@ python3.12 -m venv "$PILOT_VENV"
 
 Pip may need access to your configured package index for the wheel's declared dependencies. `doctor` reports local configuration only; it does not test catalog connectivity or whether a credential works. The [developer pilot guide](docs/developer-pilot.md) has Windows paths and the complete pilot procedure.
 
-The canonical distribution and CLI are named `skillscraper`. The Python import package remains `skillscout` for existing imports. The existing `skillscout`, `skillscout-mcp`, and `skillscout-codex-hook` executable names, `SKILLSCOUT_*` environment variables, and `skillscout` MCP configuration ID remain supported for compatibility; existing installations and configurations do not need to be renamed.
+The canonical distribution and CLI are named `skillscraper`. The Python import package remains `skillscout` for existing imports. The existing `skillscout`, `skillscout-mcp`, and `skillscout-codex-hook` executable names, `SKILLSCOUT_*` environment variables, and `skillscout` MCP configuration ID remain supported for compatibility; existing installations and configurations do not need to be renamed. The new `skillscraper-remote-mcp` command starts the authenticated hosted service.
+
+## Connect to a hosted MCP service
+
+The hosted service exposes the same three tools over Streamable HTTP at `https://YOUR_HOST/mcp`. It requires a separate per-user bearer token and does not inspect the server or client filesystem. Set up Codex and Claude Code independently using their documented remote configuration formats. The [hosted MCP guide](docs/remote-mcp.md) covers both clients, token provisioning, rotation and revocation, deployment, privacy, and troubleshooting.
+
+The remote service has implementation and local protocol tests, but has not been deployed or exercised from a live Codex or Claude Code session. Treat the connection examples as documented setup instructions, not verified client compatibility.
 
 ## Connect Codex CLI over MCP
 
@@ -131,6 +137,7 @@ The [calibration guide](docs/calibration/README.md) explains the append-only rev
 
 ## Documentation and open verification work
 
+- [Hosted MCP deployment and client guide](docs/remote-mcp.md) — authenticated Streamable HTTP, Render configuration, Codex and Claude Code setup, privacy, and operations.
 - [Developer pilot guide](docs/developer-pilot.md) — install, Codex MCP setup, sample tasks, and sanitized feedback template.
 - [Manual catalog demo](docs/manual-catalog-demo.md) — an explicit live request, separate from offline tests and requiring an authorized credential.
 - [Calibration and human review](docs/calibration/README.md) — evaluation workflow, review requirements, and metric definitions.

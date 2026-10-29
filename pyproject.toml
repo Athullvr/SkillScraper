@@ -18,6 +18,7 @@ dependencies = [
     "pydantic>=2.7,<3.0",
     "rich>=13.7,<15.0",
     "typer>=0.12,<1.0",
+    "uvicorn>=0.30,<1.0",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +31,7 @@ skillscraper = "skillscout.entrypoint:cli_main"
 skillscout = "skillscout.entrypoint:cli_main"
 skillscout-mcp = "skillscout.mcp_entrypoint:main"
 skillscout-codex-hook = "skillscout.codex_hook_entrypoint:main"
+skillscraper-remote-mcp = "skillscout.remote_entrypoint:main"
 
 [build-system]
 requires = ["hatchling>=1.24,<2.0"]

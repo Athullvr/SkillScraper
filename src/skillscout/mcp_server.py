@@ -16,10 +16,10 @@ from skillscout.application import doctor_report, prepare_recommendation
 from skillscout.application import inspect_skill as inspect_skill_app
 from skillscout.catalog import (
     CatalogAuthenticationError,
-    CatalogDataError,
-    CatalogError,
     CatalogCredentialsMissingError,
     CatalogCredentialsRejectedError,
+    CatalogDataError,
+    CatalogError,
     CatalogHTTPError,
     CatalogNotFoundError,
     CatalogRateLimitError,
@@ -27,6 +27,7 @@ from skillscout.catalog import (
     CatalogTimeoutError,
     CatalogUnavailableError,
 )
+from skillscout.concurrency import run_bounded_sync
 from skillscout.config import ConfigurationError
 from skillscout.evidence_explanations import explain_candidate, explain_inspection
 from skillscout.evidence_packet import (
@@ -57,7 +58,8 @@ from skillscout.models import (
     SkillDetail,
     SkillInspectionReport,
 )
-from skillscout.project_context import ProjectContextError
+from skillscout.project_context import ProjectContextError, read_project_context
+from skillscout.remote_context import REMOTE_REQUEST
 
 MAX_TASK_CHARS = 4_000
 MAX_PATH_CHARS = 4_096
@@ -139,8 +141,8 @@ async def prepare_task(
         )
 
     try:
-        project_scope = _project_scope(project_path)
         evidence_packets: dict[str, MCPTaskEvidencePacket] = {}
+        outcome: dict[str, object] = {}
 
         def capture_evidence_packet(
             candidate: CandidateReport,
@@ -157,13 +159,19 @@ async def prepare_task(
                 budget_bytes=context_budget_bytes,
             )
 
-        report = prepare_recommendation(
-            task,
-            project_scope,
-            agent,
-            allow_llm=False,
-            detail_observer=capture_evidence_packet,
-        )
+        def recommendation_workflow() -> str:
+            outcome["report"] = prepare_recommendation(
+                task,
+                _project_scope(project_path),
+                agent,
+                allow_llm=False,
+                project_context_reader=_request_project_context,
+                detail_observer=capture_evidence_packet,
+            )
+            return "completed"
+
+        await run_bounded_sync(recommendation_workflow)
+        report = outcome["report"]
     except ProjectContextError:
         return _prepare_error(
             "project_path_error",
@@ -283,7 +291,18 @@ async def inspect_skill(
         )
 
     try:
-        report = inspect_skill_app(skill_id, _project_scope(project_path))
+        outcome: dict[str, object] = {}
+
+        def inspection_workflow() -> str:
+            outcome["report"] = inspect_skill_app(
+                skill_id,
+                _project_scope(project_path),
+                project_context_reader=_request_project_context,
+            )
+            return "completed"
+
+        await run_bounded_sync(inspection_workflow)
+        report = outcome["report"]
     except ProjectContextError:
         return _inspect_error(
             "project_path_error",
@@ -373,6 +392,11 @@ def run_stdio() -> None:
 
 def _project_scope(project_path: str | None) -> Path:
     """Resolve the requested root while rejecting symlink traversal in its path."""
+    if REMOTE_REQUEST.get():
+        if project_path is not None:
+            raise ProjectContextError("remote requests cannot access project paths")
+        # The remote project-context reader ignores this placeholder and performs no I/O.
+        return Path("/__skillscraper_remote_no_project__")
     try:
         requested = Path.cwd() if project_path is None else Path(project_path).expanduser()
         if not requested.is_absolute():
@@ -396,6 +420,18 @@ def _project_scope(project_path: str | None) -> Path:
         if isinstance(exc, ProjectContextError):
             raise
         raise ProjectContextError("project path is not an accessible directory") from exc
+
+
+def _request_project_context(project_path: str | Path) -> ProjectSnapshot:
+    """Use no filesystem evidence for remote calls; preserve local stdio behavior."""
+    if REMOTE_REQUEST.get():
+        return ProjectSnapshot(
+            path="remote",
+            unknowns=["Project files are unavailable to the hosted SkillScraper service."],
+        )
+    return read_project_context(project_path)
+
+
 
 
 def _prepare_result(

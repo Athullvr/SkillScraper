@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: skillscraper-mcp
+    runtime: docker
+    plan: starter
+    autoDeploy: false
+    healthCheckPath: /readyz
+    numInstances: 1
+    envVars:
+      - key: SKILLSCRAPER_MCP_USERS_JSON
+        sync: false
+      - key: SKILLSCRAPER_MCP_ALLOWED_ORIGINS
+        sync: false
+      - key: SKILLSCRAPER_CATALOG_TOKEN
+        sync: false
+      - key: SKILLSCRAPER_MCP_MAX_CONCURRENT_REQUESTS
+        value: "16"
+      - key: SKILLSCRAPER_MCP_PER_USER_CONCURRENT_REQUESTS
+        value: "2"
+      - key: SKILLSCRAPER_MCP_REQUESTS_PER_MINUTE
+        value: "60"
+      - key: SKILLSCRAPER_MCP_REQUEST_TIMEOUT_SECONDS
+        value: "125"
