@@ -252,9 +252,12 @@ def test_health_and_readiness_are_public_minimal_and_do_not_echo_configuration()
             transport=httpx2.ASGITransport(app=app), base_url="http://testserver"
         ) as client:
             health = await client.get("/healthz")
+            health_head = await client.head("/healthz")
             ready = await client.get("/readyz")
             assert health.status_code == ready.status_code == 200
-            assert health.json() == {"status": "ok"}
+            assert health.text == '{"status":"ok"}'
+            assert health_head.status_code == 200
+            assert health_head.content == b""
             assert ready.json() == {"status": "ready"}
             assert ALICE_TOKEN not in health.text + ready.text
 

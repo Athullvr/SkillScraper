@@ -342,11 +342,18 @@ class AuthenticatedGateway:
             await _respond(send, origin_error, {"error": "Origin is not allowed."})
             return
         if path in {"/healthz", "/readyz"}:
-            if method != "GET":
-                await _respond(send, 405, {"error": "Method not allowed."}, [(b"allow", b"GET")])
+            allowed_methods = {"GET", "HEAD"} if path == "/healthz" else {"GET"}
+            if method not in allowed_methods:
+                allow = ", ".join(sorted(allowed_methods))
+                await _respond(
+                    send,
+                    405,
+                    {"error": "Method not allowed."},
+                    [(b"allow", allow.encode("ascii"))],
+                )
             else:
                 status = "ok" if path == "/healthz" else "ready"
-                await _respond(send, 200, {"status": status})
+                await _respond(send, 200, {"status": status}, head=method == "HEAD")
             return
         if path != MCP_PATH:
             await self.app(scope, receive, send)
@@ -476,7 +483,7 @@ async def _acquire(semaphore: asyncio.Semaphore) -> bool:
     return True
 
 
-async def _respond(send, status: int, payload: dict[str, str], headers=()) -> None:
+async def _respond(send, status: int, payload: dict[str, str], headers=(), *, head=False) -> None:
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     response_headers = [
         (b"content-type", b"application/json; charset=utf-8"),
@@ -485,4 +492,4 @@ async def _respond(send, status: int, payload: dict[str, str], headers=()) -> No
         *headers,
     ]
     await send({"type": "http.response.start", "status": status, "headers": response_headers})
-    await send({"type": "http.response.body", "body": body, "more_body": False})
+    await send({"type": "http.response.body", "body": b"" if head else body, "more_body": False})
