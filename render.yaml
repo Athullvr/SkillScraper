@@ -11,7 +11,7 @@ services:
         sync: false
       - key: SKILLSCRAPER_MCP_ALLOWED_ORIGINS
         sync: false
-      - key: SKILLSCRAPER_CATALOG_TOKEN
+      - key: SKILLSCOUT_CATALOG_TOKEN
         sync: false
       - key: SKILLSCRAPER_MCP_MAX_CONCURRENT_REQUESTS
         value: "16"

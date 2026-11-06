@@ -19,14 +19,14 @@ Configure secrets in Render's Environment settings or another approved runtime s
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `SKILLSCRAPER_MCP_USERS_JSON` | Yes | JSON object mapping each pilot user ID to a unique bearer token of at least 32 URL-safe characters. Maximum 32 users. |
-| `SKILLSCRAPER_MCP_ALLOWED_ORIGINS` | Yes | JSON array of one to ten exact HTTPS origins, for example `["https://skillscraper-mcp.onrender.com"]`. No paths or wildcards. |
+| `SKILLSCRAPER_MCP_ALLOWED_ORIGINS` | Yes | JSON array of one to ten exact HTTPS origins, for example `["https://skillscraper-25ap.onrender.com"]`. No paths or wildcards. |
 | `SKILLSCRAPER_MCP_MAX_CONCURRENT_REQUESTS` | No | Global in-flight MCP request limit; default 16, range 1–64. |
 | `SKILLSCRAPER_MCP_PER_USER_CONCURRENT_REQUESTS` | No | Per-user in-flight request limit; default 2, range 1–8. |
 | `SKILLSCRAPER_MCP_REQUESTS_PER_MINUTE` | No | Per-user rolling request limit; default 60, range 1–600. |
 | `SKILLSCRAPER_MCP_REQUEST_TIMEOUT_SECONDS` | No | Per-request deadline; default 125 seconds, range 1–180. |
 | `PORT` | Platform | HTTP listener port; defaults to 10000 for local container runs. |
 
-The service refuses startup if the user token map, allowed-origin list, or any supplied setting is invalid. It accepts native Codex and Claude Code requests without an `Origin` header. If a client sends `Origin`, the origin must exactly match the configured HTTPS allowlist and the `Host` header must match an allowlisted host. Invalid origins receive 403; a mismatched host receives 421.
+The service refuses startup if the user token map, allowed-origin list, or any supplied setting is invalid. The canonical MCP endpoint is `https://skillscraper-25ap.onrender.com/mcp`; `/healthz` and `/readyz` are health endpoints, not MCP endpoints. Configure the Origin allowlist with the actual HTTPS service origin only (without `/mcp`) when a client sends an `Origin` header. Native Codex and Claude Code requests can omit `Origin`. If a client sends `Origin`, it must exactly match the configured HTTPS allowlist and the `Host` header must match an allowlisted host. Invalid origins receive 403; a mismatched host receives 421.
 
 The SDK caps each MCP request body at 512 KiB. Uvicorn uses one worker, disables access logs, limits connections and graceful-shutdown time, and the tool layer bounds synchronous catalog work to eight workers. Authenticated requests are rate-limited per user. The app exposes only the MCP endpoint plus `/healthz` and `/readyz`; it has no shell, skill-install, or arbitrary-file endpoint.
 
@@ -61,6 +61,8 @@ Store the generated value in a password manager, then enter it only in the host'
 To rotate a token, generate a replacement, update that user's entry in the host secret store, and deploy the environment change. Once the new instance is ready, the old token no longer authenticates. To revoke a user, remove their entry and redeploy. Restarting with the changed secret does not rewrite or delete historical data because the service does not persist sessions or prompts. Requests already in progress may finish while an old instance is shutting down.
 
 Catalog access is a separate server-side credential shared by the hosted service. Friends do not receive it, and an MCP bearer token does not grant catalog access outside this service.
+
+For each client, provide the selected user's raw bearer token through the environment variable referenced by that client's MCP configuration. The `SKILLSCRAPER_MCP_USERS_JSON` map stays server-side; Codex's `bearer_token_env_var` expects the raw token without a `Bearer ` prefix, while the Claude Code header example adds that prefix.
 
 ## Codex CLI
 
@@ -120,7 +122,7 @@ These instructions follow the clients' documented configuration formats. Neither
 1. Obtain owner approval for the Render service plan and any hosting or domain costs. `render.yaml` chooses a paid `starter` plan but does not itself create a service.
 2. Create the service from the repository's Render Blueprint. Keep automatic deploys disabled.
 3. Set `SKILLSCRAPER_MCP_USERS_JSON` with one token per pilot user.
-4. Set `SKILLSCRAPER_MCP_ALLOWED_ORIGINS` to the exact Render HTTPS origin shown after service creation, such as `["https://skillscraper-mcp.onrender.com"]`. Include a custom origin only if the owner configures that domain.
+4. Set `SKILLSCRAPER_MCP_ALLOWED_ORIGINS` to the actual Render HTTPS origin, such as `["https://skillscraper-25ap.onrender.com"]`. Include a custom origin only if the owner configures that domain; do not add `/mcp` to the allowlist.
 5. Add `SKILLSCOUT_CATALOG_TOKEN` through the host secret manager only if authorized catalog access is available. Do not substitute a token pasted into a task.
 6. Deploy only after reviewing the environment values and the hosting cost. Confirm `/healthz` and `/readyz` respond with only `{"status":"ok"}` and `{"status":"ready"}`.
 7. From an authorized host, verify missing and invalid tokens receive the same 401 response; then connect one pilot user and call `doctor` and a routine `prepare_task`.

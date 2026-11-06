@@ -53,6 +53,38 @@ def _settings(**overrides) -> RemoteSettings:
     )
 
 
+async def _call_gateway(gateway, token: str = ALICE_TOKEN):
+    messages = []
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "method": "POST",
+        "path": "/mcp",
+        "headers": [(b"authorization", f"Bearer {token}".encode("ascii"))],
+        "query_string": b"",
+        "client": ("127.0.0.1", 1234),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    await gateway(scope, receive, send)
+    return messages
+
+
+def _response_status(messages) -> int:
+    return next(
+        message["status"]
+        for message in messages
+        if message["type"] == "http.response.start"
+    )
+
+
 def test_remote_tool_registry_preserves_names_schemas_and_descriptions():
     from skillscout.remote_server import remote_server
 
@@ -350,6 +382,66 @@ def test_missing_invalid_and_revoked_tokens_have_the_same_safe_error():
             id="duplicate",
         ),
         pytest.param(
+            [(b"authorization", f"Bearer {ALICE_TOKEN}".encode("ascii"))],
+            "credential_matched",
+            "alice",
+            id="bearer-one-space",
+        ),
+        pytest.param(
+            [(b"authorization", f"Bearer  {ALICE_TOKEN}".encode("ascii"))],
+            "credential_matched",
+            "alice",
+            id="bearer-multiple-spaces",
+        ),
+        pytest.param(
+            [(b"authorization", f"bearer {ALICE_TOKEN}".encode("ascii"))],
+            "credential_matched",
+            "alice",
+            id="bearer-lowercase-scheme",
+        ),
+        pytest.param(
+            [(b"authorization", b"Bearer ")],
+            "token_format_invalid",
+            None,
+            id="missing-token",
+        ),
+        pytest.param(
+            [(b"authorization", f"Bearer\t{ALICE_TOKEN}".encode("ascii"))],
+            "bearer_scheme_invalid",
+            None,
+            id="tab-is-not-a-separator",
+        ),
+        pytest.param(
+            [(b"authorization", f"Bearer \t{ALICE_TOKEN}".encode("ascii"))],
+            "token_format_invalid",
+            None,
+            id="tab-before-token-is-invalid",
+        ),
+        pytest.param(
+            [(b"authorization", f"Basic {ALICE_TOKEN}".encode("ascii"))],
+            "bearer_scheme_invalid",
+            None,
+            id="unsupported-scheme",
+        ),
+        pytest.param(
+            [(b"authorization", ("Bearer " + "a" * 31 + "!").encode("ascii"))],
+            "token_format_invalid",
+            None,
+            id="invalid-token-character",
+        ),
+        pytest.param(
+            [(b"authorization", ("Bearer " + "a" * 31).encode("ascii"))],
+            "token_format_invalid",
+            None,
+            id="token-too-short",
+        ),
+        pytest.param(
+            [(b"authorization", ("Bearer " + "a" * 513).encode("ascii"))],
+            "token_format_invalid",
+            None,
+            id="token-too-long",
+        ),
+        pytest.param(
             [(b"authorization", f"Bearer {ALICE_TOKEN}{'x' * 1024}".encode("ascii"))],
             "authorization_header_too_large",
             None,
@@ -505,6 +597,8 @@ def test_gateway_timeout_disconnect_and_concurrency_limits():
             assert second.status_code == 503
             release.set()
             assert (await first).status_code == 200
+            assert gateway._global_slots._value == 1
+            assert gateway._user_slots["alice"]._value == 1
 
         timeout_release = asyncio.Event()
 
@@ -526,6 +620,8 @@ def test_gateway_timeout_disconnect_and_concurrency_limits():
                 "/mcp", headers={"Authorization": f"Bearer {ALICE_TOKEN}"}
             )
             assert timed_out.status_code == 504
+            assert timeout_gateway._global_slots._value == 16
+            assert timeout_gateway._user_slots["alice"]._value == 2
 
         disconnect_started = asyncio.Event()
 
@@ -561,6 +657,101 @@ def test_gateway_timeout_disconnect_and_concurrency_limits():
         with pytest.raises(asyncio.CancelledError):
             await request
         assert disconnect_gateway._global_slots._value == 16
+        assert disconnect_gateway._user_slots["alice"]._value == 2
+
+    asyncio.run(check())
+
+
+def test_cancellation_waiting_for_per_user_slot_releases_global_capacity():
+    async def check():
+        app_started = asyncio.Event()
+        release_app = asyncio.Event()
+
+        async def slow_app(scope, receive, send):
+            app_started.set()
+            await release_app.wait()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok", "more_body": False})
+
+        gateway = AuthenticatedGateway(
+            slow_app,
+            RemoteSettings(
+                credentials={"alice": ALICE_TOKEN},
+                max_concurrent_requests=2,
+                per_user_concurrent_requests=1,
+                request_timeout_seconds=5,
+            ),
+        )
+        first = asyncio.create_task(_call_gateway(gateway))
+        await asyncio.wait_for(app_started.wait(), timeout=1)
+
+        waiting = asyncio.create_task(_call_gateway(gateway))
+        for _ in range(100):
+            if gateway._global_slots._value == 0:
+                break
+            await asyncio.sleep(0)
+        else:
+            raise AssertionError("second request did not acquire a global permit")
+        await asyncio.sleep(0)
+        assert not waiting.done()
+        assert gateway._user_slots["alice"]._value == 0
+
+        waiting.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiting
+        assert gateway._global_slots._value == 1
+        assert gateway._user_slots["alice"]._value == 0
+
+        release_app.set()
+        assert _response_status(await first) == 200
+        assert gateway._global_slots._value == 2
+        assert gateway._user_slots["alice"]._value == 1
+
+        assert _response_status(await _call_gateway(gateway)) == 200
+        assert gateway._global_slots._value == 2
+        assert gateway._user_slots["alice"]._value == 1
+
+    asyncio.run(check())
+
+
+def test_cancellation_after_both_permits_are_acquired_releases_capacity():
+    async def check():
+        app_started = asyncio.Event()
+        release_app = asyncio.Event()
+        calls = 0
+
+        async def app(scope, receive, send):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                app_started.set()
+                await release_app.wait()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok", "more_body": False})
+
+        gateway = AuthenticatedGateway(
+            app,
+            RemoteSettings(
+                credentials={"alice": ALICE_TOKEN},
+                max_concurrent_requests=1,
+                per_user_concurrent_requests=1,
+                request_timeout_seconds=5,
+            ),
+        )
+        request = asyncio.create_task(_call_gateway(gateway))
+        await asyncio.wait_for(app_started.wait(), timeout=1)
+        assert gateway._global_slots._value == 0
+        assert gateway._user_slots["alice"]._value == 0
+
+        request.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request
+        assert gateway._global_slots._value == 1
+        assert gateway._user_slots["alice"]._value == 1
+
+        assert _response_status(await _call_gateway(gateway)) == 200
+        assert gateway._global_slots._value == 1
+        assert gateway._user_slots["alice"]._value == 1
 
     asyncio.run(check())
 

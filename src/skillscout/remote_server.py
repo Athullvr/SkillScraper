@@ -378,12 +378,8 @@ class AuthenticatedGateway:
             await _respond(send, 503, {"error": "Service is busy; retry shortly."}, [(b"retry-after", b"1")])
             return
         user_slot = self._user_slots[user_id]
-        acquired_user = await _acquire(user_slot)
-        if not acquired_user:
-            self._global_slots.release()
-            await _respond(send, 429, {"error": "User request limit exceeded."}, [(b"retry-after", b"1")])
-            return
-
+        acquired_user = False
+        acquired_global = True
         response_started = False
 
         async def track_send(message) -> None:
@@ -393,6 +389,17 @@ class AuthenticatedGateway:
             await send(message)
 
         try:
+            acquired_user = await _acquire(user_slot)
+            if not acquired_user:
+                self._global_slots.release()
+                acquired_global = False
+                await _respond(
+                    send,
+                    429,
+                    {"error": "User request limit exceeded."},
+                    [(b"retry-after", b"1")],
+                )
+                return
             await asyncio.wait_for(
                 self.app(scope, receive, track_send),
                 timeout=self.settings.request_timeout_seconds,
@@ -416,8 +423,10 @@ class AuthenticatedGateway:
             if not response_started:
                 await _respond(send, 500, {"error": "SkillScraper request failed."})
         finally:
-            user_slot.release()
-            self._global_slots.release()
+            if acquired_user:
+                user_slot.release()
+            if acquired_global:
+                self._global_slots.release()
 
     def _authenticate(self, headers: list[tuple[bytes, bytes]]) -> str | None:
         def log_diagnostic(reason_code: str, *, user_id: str | None = None) -> None:
@@ -447,6 +456,7 @@ class AuthenticatedGateway:
         if not separator or scheme.lower() != "bearer":
             log_diagnostic("bearer_scheme_invalid")
             return None
+        token = token.lstrip(" ")  # RFC 6750 permits one or more ASCII spaces here.
         if not TOKEN_PATTERN.fullmatch(token):
             log_diagnostic("token_format_invalid")
             return None

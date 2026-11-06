@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from skillscout.config import ConfigurationError, load_config
@@ -32,6 +34,18 @@ def test_catalog_credential_precedence_prefers_compatibility_override(monkeypatc
 
     monkeypatch.setenv("SKILLSCOUT_CATALOG_TOKEN", "")
     assert load_config().catalog_token == "vercel-token"
+
+
+def test_render_blueprint_uses_the_catalog_token_variable_read_by_config(monkeypatch):
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+    monkeypatch.setenv("SKILLSCOUT_CATALOG_TOKEN", "synthetic-catalog-token")
+
+    assert load_config().catalog_token == "synthetic-catalog-token"
+
+    render_yaml = Path(__file__).parents[1] / "render.yaml"
+    render_config = render_yaml.read_text(encoding="utf-8")
+    assert "- key: SKILLSCOUT_CATALOG_TOKEN" in render_config
+    assert "- key: SKILLSCRAPER_CATALOG_TOKEN" not in render_config
 
 
 def test_llm_requires_task_text_opt_in_to_be_active(monkeypatch):
