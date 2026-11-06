@@ -420,21 +420,45 @@ class AuthenticatedGateway:
             self._global_slots.release()
 
     def _authenticate(self, headers: list[tuple[bytes, bytes]]) -> str | None:
+        def log_diagnostic(reason_code: str, *, user_id: str | None = None) -> None:
+            fields = {"reason_code": reason_code}
+            message = f"mcp_authentication_diagnostic reason_code={reason_code}"
+            if user_id is not None:
+                fields["user_id"] = user_id
+                message += f" user_id={user_id}"
+            LOGGER.info(message, extra=fields)
+
         values = [value for key, value in headers if key.lower() == b"authorization"]
-        if len(values) != 1 or len(values[0]) > 1024:
+        if not values:
+            log_diagnostic("authorization_header_missing")
+            return None
+        if len(values) != 1:
+            log_diagnostic("authorization_header_duplicate")
+            return None
+        if len(values[0]) > 1024:
+            log_diagnostic("authorization_header_too_large")
             return None
         try:
             value = values[0].decode("ascii")
         except UnicodeDecodeError:
+            log_diagnostic("authorization_header_non_ascii")
             return None
         scheme, separator, token = value.partition(" ")
-        if not separator or scheme.lower() != "bearer" or not TOKEN_PATTERN.fullmatch(token):
+        if not separator or scheme.lower() != "bearer":
+            log_diagnostic("bearer_scheme_invalid")
+            return None
+        if not TOKEN_PATTERN.fullmatch(token):
+            log_diagnostic("token_format_invalid")
             return None
 
         matched_user: str | None = None
         for user_id, expected in self.settings.credentials.items():
             if secrets.compare_digest(token, expected):
                 matched_user = user_id
+        if matched_user is None:
+            log_diagnostic("credential_mismatch")
+        else:
+            log_diagnostic("credential_matched", user_id=matched_user)
         return matched_user
 
     def _origin_error(self, headers: list[tuple[bytes, bytes]]) -> int | None:

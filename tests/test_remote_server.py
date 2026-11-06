@@ -336,6 +336,86 @@ def test_missing_invalid_and_revoked_tokens_have_the_same_safe_error():
     asyncio.run(check())
 
 
+@pytest.mark.parametrize(
+    ("headers", "reason_code", "expected_user_id"),
+    [
+        pytest.param([], "authorization_header_missing", None, id="missing"),
+        pytest.param(
+            [
+                (b"authorization", f"Bearer {ALICE_TOKEN}".encode("ascii")),
+                (b"authorization", f"Bearer {ALICE_TOKEN}".encode("ascii")),
+            ],
+            "authorization_header_duplicate",
+            None,
+            id="duplicate",
+        ),
+        pytest.param(
+            [(b"authorization", f"Bearer {ALICE_TOKEN}{'x' * 1024}".encode("ascii"))],
+            "authorization_header_too_large",
+            None,
+            id="oversized",
+        ),
+        pytest.param(
+            [(b"authorization", f"Bearer {ALICE_TOKEN}\xff".encode("latin-1"))],
+            "authorization_header_non_ascii",
+            None,
+            id="non-ascii",
+        ),
+        pytest.param(
+            [(b"authorization", f"Basic {ALICE_TOKEN}".encode("ascii"))],
+            "bearer_scheme_invalid",
+            None,
+            id="invalid-scheme",
+        ),
+        pytest.param(
+            [(b"authorization", f"Bearer {ALICE_TOKEN} ".encode("ascii"))],
+            "token_format_invalid",
+            None,
+            id="invalid-format",
+        ),
+        pytest.param(
+            [(b"authorization", b"Bearer charlie_" + b"c" * 40)],
+            "credential_mismatch",
+            None,
+            id="mismatch",
+        ),
+        pytest.param(
+            [(b"authorization", f"Bearer {ALICE_TOKEN}".encode("ascii"))],
+            "credential_matched",
+            "alice",
+            id="matched",
+        ),
+    ],
+)
+def test_authentication_diagnostics_are_structured_and_secret_safe(
+    headers, reason_code, expected_user_id, caplog
+):
+    gateway = AuthenticatedGateway(None, _settings())
+    header_values = [value.decode("latin-1") for _, value in headers]
+
+    with caplog.at_level(logging.INFO, logger="skillscout.remote"):
+        user_id = gateway._authenticate(headers)
+
+    assert user_id == expected_user_id
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.reason_code == reason_code
+    assert record.getMessage().startswith("mcp_authentication_diagnostic reason_code=")
+    rendered_record = record.getMessage() + " " + " ".join(
+        str(value) for value in record.__dict__.values()
+    )
+    for secret in (ALICE_TOKEN, BOB_TOKEN, *header_values):
+        assert secret not in rendered_record
+        assert secret not in caplog.text
+
+    if expected_user_id is None:
+        assert not hasattr(record, "user_id")
+        assert "user_id=" not in record.getMessage()
+    else:
+        assert record.user_id == expected_user_id
+        assert f"user_id={expected_user_id}" in record.getMessage()
+
+
 def test_rate_limits_are_per_user_and_revoke_on_settings_replacement():
     async def echo(scope, receive, send):
         await send({"type": "http.response.start", "status": 200, "headers": []})
