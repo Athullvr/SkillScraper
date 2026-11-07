@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from datetime import timedelta
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 import pytest
@@ -159,13 +160,21 @@ def test_server_initializes_and_discovers_only_expected_tools():
     server_info, instructions, result = asyncio.run(inspect_server())
     assert server_info is not None
     assert server_info.name == "SkillScraper"
+    assert server_info.version == package_version("skillscraper")
     assert instructions is not None
     assert "SkillScraper is an MCP server" in instructions
     assert {tool.name for tool in result.tools} == {"prepare_task", "inspect_skill", "doctor"}
     prepare = next(tool for tool in result.tools if tool.name == "prepare_task")
+    task_schema = prepare.input_schema["properties"]["task"]
+    assert task_schema["minLength"] == 1
+    assert task_schema["maxLength"] == 4_000
     budget_schema = prepare.input_schema["properties"]["context_budget_bytes"]
     assert budget_schema["default"] == 1_200
     assert budget_schema["maximum"] == 2_400
+    inspect = next(tool for tool in result.tools if tool.name == "inspect_skill")
+    skill_id_schema = inspect.input_schema["properties"]["skill_id"]
+    assert skill_id_schema["minLength"] == 1
+    assert skill_id_schema["maxLength"] == 500
 
 
 @pytest.mark.parametrize(
@@ -440,12 +449,30 @@ def test_invalid_and_excessively_long_tasks_return_structured_input_errors(tmp_p
         {"task": task, "project_path": str(tmp_path)},
     )
 
-    payload = PrepareTaskResult.model_validate(result.structured_content)
-    assert payload.status == "error"
-    assert payload.decision is None
-    assert payload.error.code == "invalid_input"
-    if task:
+    if not task or len(task) > 4_000:
+        assert result.is_error
+        assert result.structured_content is None
+    else:
+        payload = PrepareTaskResult.model_validate(result.structured_content)
+        assert payload.status == "error"
+        assert payload.decision is None
+        assert payload.error.code == "invalid_input"
         assert task not in json.dumps(payload.model_dump(mode="json"))
+
+    async def direct_call():
+        return await mcp_server.prepare_task(task=task)
+
+    direct_result = asyncio.run(direct_call())
+    assert direct_result.status == "error"
+    assert direct_result.error.code == "invalid_input"
+
+
+@pytest.mark.parametrize("skill_id", ["", " ", "x" * 501])
+def test_inspect_skill_runtime_input_bounds_do_not_depend_on_client_schema(skill_id):
+    result = asyncio.run(mcp_server.inspect_skill(skill_id=skill_id))
+
+    assert result.status == "error"
+    assert result.error.code == "invalid_input"
 
 
 def test_invalid_agent_and_project_path_are_reported_without_echoing_path(tmp_path):

@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
+from importlib.metadata import version as package_version
 
 import httpx2
 import pytest
@@ -113,12 +114,23 @@ def test_streamable_http_initializes_and_invokes_all_three_tools(monkeypatch):
         async with _connected_client(create_app(_settings()), ALICE_TOKEN) as (client, _):
             initialization = await client.initialize()
             assert initialization.protocol_version
+            assert initialization.server_info.version == package_version("skillscraper")
             listed = await client.list_tools()
             assert [tool.name for tool in listed.tools] == [
                 "prepare_task",
                 "inspect_skill",
                 "doctor",
             ]
+            prepare_schema = next(
+                tool.input_schema for tool in listed.tools if tool.name == "prepare_task"
+            )
+            assert prepare_schema["properties"]["task"]["minLength"] == 1
+            assert prepare_schema["properties"]["task"]["maxLength"] == 4_000
+            inspect_schema = next(
+                tool.input_schema for tool in listed.tools if tool.name == "inspect_skill"
+            )
+            assert inspect_schema["properties"]["skill_id"]["minLength"] == 1
+            assert inspect_schema["properties"]["skill_id"]["maxLength"] == 500
 
             doctor_result = await client.call_tool("doctor", {})
             assert doctor_result.structured_content["status"] == "success"

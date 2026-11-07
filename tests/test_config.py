@@ -36,6 +36,13 @@ def test_catalog_credential_precedence_prefers_compatibility_override(monkeypatc
     assert load_config().catalog_token == "vercel-token"
 
 
+def test_catalog_credentials_are_optional_at_startup(monkeypatch):
+    monkeypatch.delenv("SKILLSCOUT_CATALOG_TOKEN", raising=False)
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+
+    assert load_config().catalog_token is None
+
+
 def test_render_blueprint_uses_the_catalog_token_variable_read_by_config(monkeypatch):
     monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
     monkeypatch.setenv("SKILLSCOUT_CATALOG_TOKEN", "synthetic-catalog-token")
@@ -46,6 +53,15 @@ def test_render_blueprint_uses_the_catalog_token_variable_read_by_config(monkeyp
     render_config = render_yaml.read_text(encoding="utf-8")
     assert "- key: SKILLSCOUT_CATALOG_TOKEN" in render_config
     assert "- key: SKILLSCRAPER_CATALOG_TOKEN" not in render_config
+
+
+def test_remote_mcp_docs_use_the_configured_codex_token_variable():
+    docs = Path(__file__).parents[1] / "docs" / "remote-mcp.md"
+    content = docs.read_text(encoding="utf-8")
+
+    assert 'bearer_token_env_var = "SKILLSCRAPER_TOKEN"' in content
+    assert '"Authorization": "Bearer ${SKILLSCRAPER_TOKEN}"' in content
+    assert "SKILLSCRAPER_MCP_TOKEN" not in content
 
 
 def test_llm_requires_task_text_opt_in_to_be_active(monkeypatch):

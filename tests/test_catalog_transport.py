@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import time
 from dataclasses import replace
 
@@ -69,6 +70,11 @@ def test_search_detail_and_revision_bound_audit_preserve_provenance(config):
     }
 
     def handler(request):
+        authorization_matches = hmac.compare_digest(
+            request.headers.get("Authorization", ""),
+            f"Bearer {config.catalog_token}",
+        )
+        assert authorization_matches
         if request.url.path.endswith("/skills/search"):
             return httpx.Response(200, json={"data": [listing]})
         if request.url.path.endswith("/acme/skills/fastapi-auth"):
@@ -264,8 +270,9 @@ def test_permanent_http_responses_are_classified_without_retry(config, status_co
         ("fixture-token-never-log", CatalogCredentialsRejectedError, 1),
     ],
 )
+@pytest.mark.parametrize("status_code", [401, 403])
 def test_authentication_failures_distinguish_missing_and_rejected_credentials(
-    config, token, expected_error, expected_requests
+    config, token, expected_error, expected_requests, status_code
 ):
     from dataclasses import replace
 
@@ -275,7 +282,7 @@ def test_authentication_failures_distinguish_missing_and_rejected_credentials(
     def handler(_request):
         nonlocal requests
         requests += 1
-        return httpx.Response(401, json={"message": "PRIVATE_UPSTREAM_RESPONSE_BODY"})
+        return httpx.Response(status_code, json={"message": "PRIVATE_UPSTREAM_RESPONSE_BODY"})
 
     catalog, client = _catalog(configured, handler)
     try:

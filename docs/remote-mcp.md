@@ -36,8 +36,8 @@ Catalog configuration keeps the existing environment-variable names and credenti
 
 | Variable | Meaning |
 | --- | --- |
-| `SKILLSCOUT_CATALOG_TOKEN` | Preferred server-side catalog bearer credential. |
-| `VERCEL_OIDC_TOKEN` | Existing fallback catalog credential when `SKILLSCOUT_CATALOG_TOKEN` is empty or unset. |
+| `SKILLSCOUT_CATALOG_TOKEN` | Preferred environment slot for the server-side catalog bearer credential. |
+| `VERCEL_OIDC_TOKEN` | Fallback catalog bearer credential when `SKILLSCOUT_CATALOG_TOKEN` is empty or unset. |
 | `SKILLSCOUT_CATALOG_URL` | Optional HTTPS catalog base URL; defaults to `https://skills.sh`. |
 | `SKILLSCOUT_CANDIDATE_LIMIT` | Optional candidate bound; defaults to 3 and remains capped at 5. |
 | `SKILLSCOUT_REQUEST_TIMEOUT_SECONDS` | Existing catalog/LLM total request timeout setting; defaults to 30 seconds and is bounded by the config loader. |
@@ -46,7 +46,20 @@ Catalog configuration keeps the existing environment-variable names and credenti
 | `SKILLSCOUT_LLM_MODEL` | Optional model label; defaults to `gpt-4o-mini`. |
 | `SKILLSCOUT_LLM_SEND_TASK` | Existing opt-in setting for task transmission to the LLM path; remote MCP tool calls do not use that path. |
 
-The deployment does not require a catalog credential to start. Routine tasks can receive the existing deterministic `NO_SKILL_NEEDED` result without a catalog call. Catalog-backed requests with no configured credential return `catalog_credentials_missing`; the service does not turn that error into an empty search or a recommendation. A catalog credential supplied in a task prompt is never used as configuration. Existing task-query redaction still applies before catalog search. No authorized live catalog test was performed.
+The skills.sh API documents Vercel OIDC bearer authentication; it does not document a separate static API key. `SKILLSCOUT_CATALOG_TOKEN` is the preferred SkillScraper environment slot for that raw bearer token. The client sends it as `Authorization: Bearer <token>`, so do not include the `Bearer ` prefix in the environment value. `VERCEL_OIDC_TOKEN` is a fallback variable for the same credential type.
+
+The deployment does not require a catalog credential to start. Routine tasks can receive the existing deterministic `NO_SKILL_NEEDED` result without a catalog call. Catalog-backed requests with no configured credential return `catalog_credentials_missing`; the service does not turn that error into an empty search or a recommendation. A catalog credential supplied in a task prompt is never used as configuration. Existing task-query redaction still applies before catalog search.
+
+SkillScraper reads the configured value from the process environment and does not mint, refresh, or rotate it. Vercel OIDC tokens are short-lived. A token copied into Render will expire, and Render cannot mint Vercel OIDC tokens for this service. Use this deployment only with an approved secure rotation process or a longer-lived credential that the skills.sh operator explicitly supports. See the [skills.sh API reference](https://www.skills.sh/docs/api) and [Vercel OIDC documentation](https://vercel.com/docs/oidc). A successful authenticated live catalog test remains outstanding.
+
+#### Configure catalog access in Render
+
+The Blueprint declares `SKILLSCOUT_CATALOG_TOKEN` with `sync: false`; it deliberately contains no credential value. In the Render Dashboard, select the `skillscraper-mcp` service, open **Environment**, choose **+ Add Environment Variable**, and set:
+
+- **Key:** `SKILLSCOUT_CATALOG_TOKEN`
+- **Value:** the current, authorized raw skills.sh Vercel OIDC bearer token, without a `Bearer ` prefix
+
+Save and deploy/restart the service so the process reads the value. The existing `VERCEL_OIDC_TOKEN` fallback can be added in the same Environment page if that variable name is required, but the preferred key is `SKILLSCOUT_CATALOG_TOKEN`. Do not treat a copied short-lived token as permanent configuration; arrange secure rotation before enabling catalog-backed use.
 
 ## Provisioning, rotation, and revocation
 
@@ -73,18 +86,18 @@ Set the following in `~/.codex/config.toml`, merging with existing settings:
 ```toml
 [mcp_servers.skillscout]
 url = "https://YOUR_HOST/mcp"
-bearer_token_env_var = "SKILLSCRAPER_MCP_TOKEN"
+bearer_token_env_var = "SKILLSCRAPER_TOKEN"
 tool_timeout_sec = 150
 ```
 
-The token value is not stored in the TOML file. Make `SKILLSCRAPER_MCP_TOKEN` available to the Codex process through an OS credential manager or a secure shell environment. To enter it without putting the value in shell history:
+The token value is not stored in the TOML file. Make `SKILLSCRAPER_TOKEN` available to the Codex process through an OS credential manager or a secure shell environment. To enter it without putting the value in shell history:
 
 ```bash
-read -r -s -p "SkillScraper token: " SKILLSCRAPER_MCP_TOKEN
+read -r -s -p "SkillScraper token: " SKILLSCRAPER_TOKEN
 printf '\n'
-export SKILLSCRAPER_MCP_TOKEN
+export SKILLSCRAPER_TOKEN
 codex
-unset SKILLSCRAPER_MCP_TOKEN
+unset SKILLSCRAPER_TOKEN
 ```
 
 Verify with `codex mcp list` and `/mcp` in the Codex TUI. Ask Codex to call `doctor`, then check that the tool list includes `prepare_task`, `inspect_skill`, and `doctor`. Remove the client entry with `codex mcp remove skillscout`; this disconnects the client but does not revoke the server token. Revoke it through the host secret store as described above.
@@ -102,7 +115,7 @@ Add this entry to the `mcpServers` object in a user-level `~/.claude.json` or a 
       "type": "http",
       "url": "https://YOUR_HOST/mcp",
       "headers": {
-        "Authorization": "Bearer ${SKILLSCRAPER_MCP_TOKEN}"
+        "Authorization": "Bearer ${SKILLSCRAPER_TOKEN}"
       }
     }
   }
@@ -113,7 +126,7 @@ The file contains only the environment-variable reference, not the token. If usi
 
 Verify with `claude mcp list` and `/mcp`; check the server is connected and the three tools are listed, then call `doctor`. Remove the entry with `claude mcp remove skillscout`. Revoke the bearer token separately in the host secret store.
 
-These instructions follow the clients' documented configuration formats. Neither Codex nor Claude Code was connected to a deployed SkillScraper endpoint during this work, so actual client compatibility remains unverified.
+The Codex configuration and tool calls have been smoke-tested against the deployed service. Claude Code compatibility and successful catalog-backed calls remain unverified.
 
 ## Operational procedures
 
@@ -137,10 +150,10 @@ Render supports rolling back to a prior deploy from its dashboard. Keep automati
 | Symptom | Check |
 | --- | --- |
 | `/readyz` is not 200 | Startup configuration is invalid or the process is not ready. Check host logs for a setting name and validation message; secret values are not printed. |
-| MCP returns 401 | Confirm the client process can read its own `SKILLSCRAPER_MCP_TOKEN`, the user token is current, and the Authorization header is being sent. Missing, invalid, and revoked tokens deliberately share one response. |
+| MCP returns 401 | Confirm the client process can read its own `SKILLSCRAPER_TOKEN`, the user token is current, and the Authorization header is being sent. Missing, invalid, and revoked tokens deliberately share one response. |
 | MCP returns 403 or 421 | Check that a client-sent `Origin` is on the exact HTTPS allowlist and its `Host` matches. Native Codex/Claude Code CLI connections normally need no Origin allowlist entry. |
 | Tools do not appear in Codex | Check `codex mcp list`, the URL ends in `/mcp`, and the bearer environment variable is set in the Codex process environment. Restart Codex after environment changes. |
-| Tools do not appear in Claude Code | Check `claude mcp list`, `/mcp`, workspace trust, JSON syntax, and whether `${SKILLSCRAPER_MCP_TOKEN}` is available to the Claude Code process. Restart after changing the environment. |
+| Tools do not appear in Claude Code | Check `claude mcp list`, `/mcp`, workspace trust, JSON syntax, and whether `${SKILLSCRAPER_TOKEN}` is available to the Claude Code process. Restart after changing the environment. |
 | `catalog_credentials_missing` | Add an authorized server-side `SKILLSCOUT_CATALOG_TOKEN`. This is an operational error, not an empty result or a quality label. |
 | Tool call times out | Check catalog service availability and the configured request timeout. The read-only tools can be retried; a timeout is not a recommendation decision. |
 

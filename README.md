@@ -61,7 +61,7 @@ The canonical distribution and CLI are named `skillscraper`. The Python import p
 
 The hosted service exposes the same three tools over Streamable HTTP at `https://YOUR_HOST/mcp`. It requires a separate per-user bearer token and does not inspect the server or client filesystem. Set up Codex and Claude Code independently using their documented remote configuration formats. The [hosted MCP guide](docs/remote-mcp.md) covers both clients, token provisioning, rotation and revocation, deployment, privacy, and troubleshooting.
 
-The remote service has implementation and local protocol tests, but has not been deployed or exercised from a live Codex or Claude Code session. Treat the connection examples as documented setup instructions, not verified client compatibility.
+The deployed service has been smoke-tested through the configured Codex MCP connection for health, protocol initialization, authentication, tool discovery, `doctor`, and the routine no-skill path. Catalog-backed recommendations remain unverified because an authorized catalog credential is not configured; Claude Code compatibility is also unverified.
 
 ## Connect Codex CLI over MCP
 

@@ -12,6 +12,7 @@ import time
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib.metadata import version as package_version
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
@@ -201,13 +202,21 @@ def _normalize_origin(value: object) -> str | None:
 
 
 def _build_remote_server() -> MCPServer:
-    server = MCPServer("SkillScraper", instructions=MCP_INSTRUCTIONS)
+    server = MCPServer(
+        "SkillScraper",
+        version=package_version("skillscraper"),
+        instructions=MCP_INSTRUCTIONS,
+    )
 
     @server.tool(description=local_mcp.prepare_task.__doc__, annotations=READ_ONLY_OPEN_WORLD)
     async def prepare_task(
         task: Annotated[
             str,
-            Field(description="Coding task, required, non-empty, maximum 4000 characters."),
+            Field(
+                min_length=1,
+                max_length=local_mcp.MAX_TASK_CHARS,
+                description="Coding task, required, non-empty, maximum 4000 characters.",
+            ),
         ],
         project_path: Annotated[
             str | None,
@@ -261,6 +270,8 @@ def _build_remote_server() -> MCPServer:
         skill_id: Annotated[
             str,
             Field(
+                min_length=1,
+                max_length=local_mcp.MAX_SKILL_ID_CHARS,
                 description="Stable skills.sh identifier in source/skill form, such as owner/repo/skill."
             ),
         ],
